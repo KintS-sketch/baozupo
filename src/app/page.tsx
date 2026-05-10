@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, AlertCircle, Loader2, Clock, Bell } from "lucide-react";
+import { Building2, AlertCircle, Loader2, Clock, Bell, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BrandMark } from "@/components/brand-mark";
@@ -160,7 +160,12 @@ export default function DashboardPage() {
     if (h < 22) return { hi: "晚上好", sub: "辛苦一天啦，慢慢忙不急" };
     return { hi: "夜里好", sub: "做完这点就早点休息" };
   })();
-  const userName = user?.email?.split("@")[0] ?? "房东";
+  // 称呼兜底：空 / 全数字 / 4 位以上数字开头都不好看，统一回退到 "房东"（暖心 + 身份认同）
+  const userName = (() => {
+    const local = user?.email?.split("@")[0] ?? "";
+    if (!local || /^\d+$/.test(local) || /^\d{4,}/.test(local)) return "房东";
+    return local;
+  })();
 
   // 状态相关的鼓励语 — 让 app 像有人在跟你说话
   const statusMsg = (() => {
@@ -221,19 +226,20 @@ export default function DashboardPage() {
 
       {/* 待处理提醒 */}
       {pendingReminders > 0 && (
-        <Link href="/reminders">
-          <Card className="border-warning/30 bg-warning-soft hover:brightness-[0.98] transition-all">
-            <CardContent className="py-3">
+        <Link href="/reminders" className="block">
+          <Card className="border-warning/30 bg-warning-soft hover:brightness-[0.98] active:brightness-95 transition-all">
+            <CardContent className="px-4 py-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/15">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/15">
                   <Bell className="h-5 w-5 text-warning" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    你有 {pendingReminders} 条待处理提醒
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground leading-tight">
+                    你有 <span className="num font-bold text-warning">{pendingReminders}</span> 条待处理提醒
                   </p>
-                  <p className="text-xs text-muted-foreground">点击查看详情</p>
+                  <p className="text-xs text-muted-foreground mt-1">点击查看详情</p>
                 </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </div>
             </CardContent>
           </Card>
