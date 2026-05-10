@@ -53,3 +53,4 @@ dev-server.log
 ===
 # 本地生成的 QR 码（不部署到生产）
 public/qr-baozupo.png
+/build-tools
