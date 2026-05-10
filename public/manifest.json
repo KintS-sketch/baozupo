@@ -1,7 +1,7 @@
 {
   "id": "/?source=pwa",
   "name": "养房 Tend",
-  "short_name": "养房",
+  "short_name": "养房助手",
   "description": "AI 房东助手 · 让管理几套房像养一盆花一样轻松",
   "start_url": "/",
   "scope": "/",
