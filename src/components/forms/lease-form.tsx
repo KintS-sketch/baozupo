@@ -24,6 +24,7 @@ const schema = z.object({
   payment_cycle: z.enum(["monthly", "quarterly", "biannual", "annual"]),
   rent_due_day: z.coerce.number().int().min(1, "至少1号").max(31, "最多31号"),
   billing_mode: z.enum(["natural_month", "rolling_month"]),
+  generate_bills: z.boolean().default(true),
   notes: z.string().optional(),
 }).refine(
   (data) => !data.start_date || !data.end_date || new Date(data.end_date) > new Date(data.start_date),
@@ -56,6 +57,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
       payment_cycle: defaultValues?.payment_cycle ?? "monthly",
       rent_due_day: defaultValues?.rent_due_day ?? 1,
       billing_mode: defaultValues?.billing_mode ?? "natural_month",
+      generate_bills: !defaultValues?.id,
       notes: defaultValues?.notes ?? "",
     },
   });
@@ -212,6 +214,31 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
             )}
           />
         </div>
+
+        {!defaultValues?.id && (
+          <FormField
+            control={form.control}
+            name="generate_bills"
+            render={({ field }) => (
+              <FormItem>
+                <label className="flex items-start gap-3 rounded-lg border border-border bg-primary-soft/40 p-3 cursor-pointer hover:bg-primary-soft/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={field.value}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-primary cursor-pointer"
+                  />
+                  <div className="text-sm flex-1">
+                    <p className="font-medium">立即生成全部账单</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      根据起租日、结束日和账单模式自动算出每个月的账单，省去手动录入
+                    </p>
+                  </div>
+                </label>
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}

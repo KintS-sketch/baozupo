@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Plus, Building2, MoreVertical, Edit, Trash2, Loader2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,63 +143,73 @@ export default function PropertiesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {properties.map((property) => (
-            <Card key={property.id} className="group hover:border-primary/30 transition-colors">
-              <CardContent className="pt-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <Building2 className="h-5 w-5 text-primary" />
+            <Card key={property.id} className="group hover:border-primary/30 transition-colors relative">
+              <Link href={`/properties/${property.id}`} className="block">
+                <CardContent className="pt-4 pr-12">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <Building2 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-sm truncate">{property.name}</h3>
+                        {property.layout && (
+                          <p className="text-xs text-muted-foreground">{property.layout}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sm truncate">{property.name}</h3>
-                      {property.layout && (
-                        <p className="text-xs text-muted-foreground">{property.layout}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 ml-2 shrink-0">
-                    <Badge variant={STATUS_BADGE_VARIANTS[property.status]}>
+                    <Badge variant={STATUS_BADGE_VARIANTS[property.status]} className="ml-2 shrink-0">
                       {PROPERTY_STATUS_LABELS[property.status]}
                     </Badge>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(property)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          编辑
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setDeletingId(property.id)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          删除
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </div>
-                </div>
 
-                <div className="flex items-start gap-1 text-xs text-muted-foreground">
-                  <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span className="line-clamp-2">{property.address}</span>
-                </div>
-
-                {(property.area || property.city) && (
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                    {property.area && <span>{property.area} ㎡</span>}
-                    {property.city && <span>{property.city}{property.district ? ` · ${property.district}` : ""}</span>}
+                  <div className="flex items-start gap-1 text-xs text-muted-foreground">
+                    <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span className="line-clamp-2">{property.address}</span>
                   </div>
-                )}
 
-                {property.notes && (
-                  <p className="mt-2 text-xs text-muted-foreground line-clamp-1">{property.notes}</p>
-                )}
-              </CardContent>
+                  {(property.area || property.city || property.district) && (
+                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                      {property.area && <span>{property.area} ㎡</span>}
+                      {(property.district || property.city) && (
+                        <span>
+                          {property.district}
+                          {property.district && property.city ? " · " : ""}
+                          {property.city}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {property.notes && (
+                    <p className="mt-2 text-xs text-muted-foreground line-clamp-1">{property.notes}</p>
+                  )}
+                </CardContent>
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-3 right-2 h-7 w-7 z-10"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => openEdit(property)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    编辑
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setDeletingId(property.id)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </Card>
           ))}
         </div>

@@ -15,6 +15,8 @@ import { useUser } from "@/contexts/user-context";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { LEASE_STATUS_LABELS, PAYMENT_CYCLE_LABELS, BILLING_MODE_LABELS } from "@/types";
 import type { Lease, LeaseStatus } from "@/types";
+import { generateBillPeriods } from "@/lib/billing";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 const STATUS_BADGE: Record<LeaseStatus, "success" | "muted" | "destructive"> = {
@@ -60,7 +62,7 @@ export default function LeasesPage() {
   const handleSubmit = async (values: LeaseFormValues) => {
     if (!householdId) return;
 
-    const { tenant_id, ...leaseData } = values;
+    const { tenant_id, generate_bills, ...leaseData } = values;
     const payload = { ...leaseData, household_id: householdId };
 
     if (editing) {
@@ -81,7 +83,43 @@ export default function LeasesPage() {
       // 更新房源状态为出租中
       await supabase.from("properties").update({ status: "rented" }).eq("id", values.property_id);
 
-      toast.success("租约已创建，房源状态已更新为出租中");
+      // 自动生成账单
+      let billsCreated = 0;
+      if (generate_bills) {
+        const periods = generateBillPeriods(
+          new Date(values.start_date),
+          new Date(values.end_date),
+          values.monthly_rent,
+          values.billing_mode,
+          values.rent_due_day
+        );
+        const billRows = periods.map((p) => ({
+          lease_id: newLease.id,
+          period_start: format(p.periodStart, "yyyy-MM-dd"),
+          period_end: format(p.periodEnd, "yyyy-MM-dd"),
+          days_in_period: p.daysInPeriod,
+          ratio: p.ratio,
+          due_date: format(p.dueDate, "yyyy-MM-dd"),
+          rent_amount: p.rentAmount,
+          utility_amount: 0,
+          other_amount: 0,
+          total_amount: p.rentAmount,
+          paid_amount: 0,
+          status: "pending",
+        }));
+        const { error: billsErr } = await supabase.from("bills").insert(billRows);
+        if (billsErr) {
+          toast.error(`租约已创建，但账单生成失败：${billsErr.message}`);
+        } else {
+          billsCreated = billRows.length;
+        }
+      }
+
+      toast.success(
+        billsCreated > 0
+          ? `租约已创建，自动生成 ${billsCreated} 期账单`
+          : "租约已创建，房源状态已更新为出租中"
+      );
     }
 
     setFormOpen(false);

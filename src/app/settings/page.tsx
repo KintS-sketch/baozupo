@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { User, LogOut, ChevronRight, Loader2, Sparkles, Users, CreditCard, FileText, Bell } from "lucide-react";
+import { User, LogOut, ChevronRight, Loader2, Sparkles, CreditCard, FileText, Bell, Gauge } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,8 +14,8 @@ import { toast } from "sonner";
 
 const QUICK_LINKS = [
   { href: "/reminders", label: "提醒中心", icon: Bell, desc: "查看待处理提醒" },
-  { href: "/tenants", label: "租客管理", icon: Users, desc: "查看和管理租客信息" },
   { href: "/leases", label: "租约管理", icon: FileText, desc: "查看和管理租约" },
+  { href: "/meters", label: "抄表记录", icon: Gauge, desc: "水电气表读数" },
   { href: "/payments", label: "收款记录", icon: CreditCard, desc: "历史收款流水" },
 ];
 

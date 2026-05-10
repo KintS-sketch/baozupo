@@ -50,3 +50,6 @@ extract-design.mjs
 # 开发期日志
 dev-server.log
 *.log
+===
+# 本地生成的 QR 码（不部署到生产）
+public/qr-baozupo.png

@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
+  Users,
   Receipt,
-  Gauge,
   MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 const mobileNavItems = [
   { href: "/", label: "概览", icon: LayoutDashboard },
   { href: "/properties", label: "房源", icon: Building2 },
+  { href: "/tenants", label: "租客", icon: Users },
   { href: "/bills", label: "账单", icon: Receipt },
-  { href: "/meters", label: "抄表", icon: Gauge },
   { href: "/settings", label: "更多", icon: MoreHorizontal },
 ];
 

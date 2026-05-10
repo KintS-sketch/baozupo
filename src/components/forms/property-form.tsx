@@ -81,12 +81,12 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
 
           <FormField
             control={form.control}
-            name="city"
+            name="district"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>城市</FormLabel>
+                <FormLabel>省</FormLabel>
                 <FormControl>
-                  <Input placeholder="北京" {...field} />
+                  <Input placeholder="北京市 / 广东省" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -95,12 +95,12 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
 
           <FormField
             control={form.control}
-            name="district"
+            name="city"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>区域</FormLabel>
+                <FormLabel>城市</FormLabel>
                 <FormControl>
-                  <Input placeholder="朝阳区" {...field} />
+                  <Input placeholder="北京 / 深圳" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
