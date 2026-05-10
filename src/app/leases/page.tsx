@@ -201,7 +201,7 @@ export default function LeasesPage() {
     if (!error) {
       // 更新房源状态为空置
       await supabase.from("properties").update({ status: "vacant" }).eq("id", lease.property_id);
-      toast.success("租约已退租，房源已更新为空置");
+      toast.success("租约已归档，房源已改回空置");
       fetchLeases();
     } else {
       toast.error("操作失败");
@@ -241,7 +241,7 @@ export default function LeasesPage() {
           <TabsTrigger value="all">全部</TabsTrigger>
           <TabsTrigger value="active">生效中</TabsTrigger>
           <TabsTrigger value="expired">已到期</TabsTrigger>
-          <TabsTrigger value="terminated">已退租</TabsTrigger>
+          <TabsTrigger value="terminated">已归档</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -304,7 +304,8 @@ export default function LeasesPage() {
                             className="text-orange-600 focus:text-orange-600"
                             onClick={() => handleTerminate(lease)}
                           >
-                            办理退租
+                            <FileText className="mr-2 h-4 w-4" />
+                            归档此租约
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem

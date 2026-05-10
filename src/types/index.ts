@@ -218,7 +218,7 @@ export const PROPERTY_STATUS_LABELS: Record<PropertyStatus, string> = {
 export const LEASE_STATUS_LABELS: Record<LeaseStatus, string> = {
   active: "生效中",
   expired: "已到期",
-  terminated: "已退租",
+  terminated: "已归档",
 };
 
 export const BILL_STATUS_LABELS: Record<BillStatus, string> = {

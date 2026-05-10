@@ -217,13 +217,27 @@ export function BillPaymentForm({ bill, tenantName, propertyName, onSubmit, onCa
           )}
         />
 
-        <div className="flex gap-2 pt-2 sticky bottom-0 bg-card pb-1">
-          <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSubmitting}>
+        <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2 sticky bottom-0 bg-card pb-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={onCancel}
+            disabled={isSubmitting}
+            className="w-full sm:w-auto"
+          >
             取消
           </Button>
-          <Button type="submit" size="lg" disabled={isSubmitting} className="flex-1 shadow-soft-md">
-            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            确认收款 · {formatCurrency(Number(currentAmount) || 0)}
+          <Button
+            type="submit"
+            size="lg"
+            disabled={isSubmitting}
+            className="w-full sm:flex-1 shadow-soft-md min-w-0"
+          >
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin shrink-0" />}
+            <span className="truncate">
+              确认收款 · {formatCurrency(Number(currentAmount) || 0)}
+            </span>
           </Button>
         </div>
       </form>
