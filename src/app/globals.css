@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Roost / 安巢 设计 tokens
+ * 暖纸底 + 陶土主色，提取自 _ Tend UI _.html
+ * shadcn/ui 使用 HSL 三元组（不带 hsl() 包裹），由组件用 hsl(var(--name)) 引用
+ */
+@layer base {
+  :root {
+    /* 中性 — warm paper neutrals */
+    --background: 38 38% 97%;       /* #FAF7F2 */
+    --foreground: 19 14% 11%;       /* #1F1A17 */
+    --card: 0 0% 100%;              /* #FFFFFF */
+    --card-foreground: 19 14% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 19 14% 11%;
+
+    /* 主色 — terra cotta 陶土红 */
+    --primary: 9 56% 51%;           /* #C8553D */
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 16 71% 95%;     /* #FBEEE9  柔和填充背景 */
+    --primary-soft-foreground: 11 59% 35%; /* #8C3625 */
+    --primary-hover: 11 59% 43%;
+
+    /* 次级 + 中性 */
+    --secondary: 38 35% 92%;        /* #F2EDE3 */
+    --secondary-foreground: 19 14% 11%;
+    --muted: 38 35% 92%;
+    --muted-foreground: 26 13% 38%; /* #6B5F54 */
+    --muted-faint: 28 13% 56%;      /* #9C8E80 三级文字 */
+
+    /* 强调（蜂蜜色，仅小面积使用） */
+    --accent: 36 71% 66%;           /* #E8B86A */
+    --accent-foreground: 19 14% 11%;
+    --accent-soft: 36 75% 92%;
+
+    /* 语义 */
+    --destructive: 7 50% 47%;       /* #B5483A */
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 14 56% 91%; /* #F5E2DD */
+    --success: 99 24% 39%;          /* #5B7A4C */
+    --success-soft: 86 25% 93%;
+    --warning: 35 62% 48%;          /* #C68A2E */
+    --warning-soft: 41 72% 91%;
+    --info: 211 26% 49%;            /* #5B7A9C */
+    --info-soft: 210 27% 92%;
+
+    /* 边框/输入/聚焦 */
+    --border: 36 30% 87%;           /* #E8E1D5 */
+    --border-strong: 35 28% 80%;    /* #D9CFBE */
+    --input: 36 30% 87%;
+    --ring: 9 56% 51%;
+
+    /* 圆角阶梯：sm=8 / md=14 / lg=20 / xl=28 / pill=999 */
+    --radius: 0.875rem;             /* 14px */
+
+    /* 暖色阴影（不是冷的纯黑） */
+    --shadow-sm: 0 1px 2px rgba(60, 40, 30, 0.04);
+    --shadow-md: 0 2px 8px rgba(60, 40, 30, 0.06), 0 1px 2px rgba(60, 40, 30, 0.04);
+    --shadow-lg: 0 8px 28px rgba(60, 40, 30, 0.08), 0 2px 6px rgba(60, 40, 30, 0.04);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* 数字采用等宽数字 + tabular-nums，对齐金额列 */
+  .num,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+/* PWA 安全区域适配 */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 移动端底部导航占位 */
+@media (max-width: 767px) {
+  .main-content {
+    padding-bottom: 5rem;
+  }
+}

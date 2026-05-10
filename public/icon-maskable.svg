@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <!-- 全填充背景：maskable icon 需要安全区，图形保留在中心 80% 内 -->
+  <rect width="192" height="192" fill="#FBEEE9"/>
+  <!-- 嫩芽屋顶图形 - 中心 60%，避开各平台的圆形/方形/水滴形遮罩 -->
+  <g transform="translate(96 102) scale(2.0) translate(-30 -30)" stroke="#C8553D" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5">
+    <path d="M11 52 V32 L30 20 L49 32 V52 Z"/>
+    <path d="M30 22 Q30 14 30 9"/>
+    <path d="M30 14 Q24 13 22 17 Q26 19 30 16" fill="#C8553D" fill-opacity="0.85" stroke="none"/>
+    <path d="M30 11 Q35 10 37 13 Q34 16 30 13" fill="#C8553D" stroke="none"/>
+  </g>
+</svg>
