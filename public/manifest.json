@@ -1,44 +1,63 @@
 {
+  "id": "/?source=pwa",
   "name": "养房 Tend",
   "short_name": "养房",
   "description": "AI 房东助手 · 让管理几套房像养一盆花一样轻松",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#FAF7F2",
+  "background_color": "#FBEEE9",
   "theme_color": "#C8553D",
   "orientation": "portrait",
   "lang": "zh-CN",
+  "dir": "ltr",
+  "categories": ["productivity", "finance", "utilities"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "https://baozupo.vercel.app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://baozupo.vercel.app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://baozupo.vercel.app/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://baozupo.vercel.app/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://baozupo.vercel.app/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://baozupo.vercel.app/screenshot-narrow.png",
+      "sizes": "720x1280",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "首页 — 本月应收一目了然"
     },
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
+      "src": "https://baozupo.vercel.app/screenshot-wide.png",
+      "sizes": "1280x720",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-maskable-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/icon-maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "form_factor": "wide",
+      "label": "桌面端房源详情"
     }
   ]
 }
