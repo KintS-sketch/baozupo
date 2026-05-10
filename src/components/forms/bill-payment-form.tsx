@@ -121,18 +121,19 @@ export function BillPaymentForm({ bill, tenantName, propertyName, onSubmit, onCa
             <FormItem>
               <FormLabel>收款金额</FormLabel>
               <FormControl>
-                <div className="relative flex items-baseline h-14 px-4 bg-secondary border border-border rounded-xl focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
-                  <span className="num text-lg text-muted-faint mr-1">¥</span>
+                <div className="relative flex items-center h-14 px-4 bg-secondary border border-border rounded-xl focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+                  <span className="num text-2xl font-medium text-muted-foreground mr-1.5 leading-none">¥</span>
                   <input
                     type="number"
                     step="0.01"
                     min="0.01"
+                    inputMode="decimal"
                     {...field}
                     onChange={(e) => field.onChange(e.target.value)}
-                    className="num flex-1 bg-transparent text-2xl font-bold tracking-tight focus:outline-none"
+                    className="num flex-1 min-w-0 bg-transparent text-2xl font-bold tracking-tight focus:outline-none leading-none"
                   />
                   {isFull && !isOverpay && (
-                    <span className="text-xs text-muted-foreground ml-2">全额</span>
+                    <span className="text-xs text-muted-foreground ml-2 shrink-0">全额</span>
                   )}
                 </div>
               </FormControl>
