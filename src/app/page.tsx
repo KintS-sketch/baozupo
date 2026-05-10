@@ -152,13 +152,44 @@ export default function DashboardPage() {
   const currentMonth = format(new Date(), "yyyy 年 M 月");
   const greeting = (() => {
     const h = new Date().getHours();
-    if (h < 6) return "凌晨好";
-    if (h < 12) return "上午好";
-    if (h < 14) return "中午好";
-    if (h < 18) return "下午好";
-    return "晚上好";
+    if (h < 6) return { hi: "夜深了", sub: "早点歇下，明天还要打理家事呢" };
+    if (h < 9) return { hi: "早安", sub: "新一天又开始啦，慢慢来不慌" };
+    if (h < 12) return { hi: "上午好", sub: "喝口茶，把这个月的收支看一看" };
+    if (h < 14) return { hi: "中午好", sub: "吃饭了吗？记账可以吃完再说" };
+    if (h < 18) return { hi: "下午好", sub: "今天的进度还顺利吗" };
+    if (h < 22) return { hi: "晚上好", sub: "辛苦一天啦，慢慢忙不急" };
+    return { hi: "夜里好", sub: "做完这点就早点休息" };
   })();
   const userName = user?.email?.split("@")[0] ?? "房东";
+
+  // 状态相关的鼓励语 — 让 app 像有人在跟你说话
+  const statusMsg = (() => {
+    if (!stats) return null;
+    const { monthlyReceivable, monthlyReceived, overdueCount, rentedCount, vacantCount } = stats;
+    if (rentedCount === 0 && vacantCount === 0) {
+      return { tone: "muted", text: "先把第一套房源添进来吧 🌱 慢慢来" };
+    }
+    if (overdueCount > 0) {
+      return { tone: "warning", text: `有 ${overdueCount} 张账单要催一催，加油` };
+    }
+    if (monthlyReceivable > 0 && monthlyReceived >= monthlyReceivable) {
+      return { tone: "success", text: "本月房租都到账啦 ☕ 喝杯好茶" };
+    }
+    if (monthlyReceivable === 0 && rentedCount > 0) {
+      return { tone: "muted", text: "本月还没到收租日 · 安心等等" };
+    }
+    if (monthlyReceived > 0) {
+      const remaining = monthlyReceivable - monthlyReceived;
+      return { tone: "primary", text: `还差 ${formatCurrency(remaining)} 就收齐了` };
+    }
+    return { tone: "muted", text: "认真的房东，租客也安心 🌿" };
+  })();
+  const statusToneClass: Record<string, string> = {
+    muted: "text-muted-foreground",
+    primary: "text-primary",
+    warning: "text-warning",
+    success: "text-success",
+  };
 
   if (userLoading || loading) {
     return (
@@ -175,13 +206,16 @@ export default function DashboardPage() {
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-3xl">
       {/* 问候 */}
-      <div className="flex items-start justify-between pt-1">
-        <div>
-          <p className="text-sm text-muted-foreground">{greeting}，{userName}</p>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">{currentMonth}</h1>
+      <div className="flex items-start justify-between pt-1 gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-foreground font-medium">
+            {greeting.hi}，{userName}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{greeting.sub}</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-2">{currentMonth}</h1>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
-          <BrandMark size={22} />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary shadow-soft">
+          <BrandMark size={26} />
         </div>
       </div>
 
@@ -235,6 +269,11 @@ export default function DashboardPage() {
               <span className="num font-semibold">{formatCurrency(totalReceivable - totalReceived)}</span>
             </span>
           </div>
+          {statusMsg && (
+            <p className={`mt-3 text-xs ${statusToneClass[statusMsg.tone] ?? "text-muted-foreground"}`}>
+              {statusMsg.text}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -346,6 +385,11 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      {/* 底部温馨结尾 */}
+      <p className="text-center text-xs text-muted-faint pt-2 pb-2">
+        像养一盆花一样，慢慢经营你的房子 🌿
+      </p>
     </div>
   );
 }
