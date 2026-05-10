@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, FileText, MoreVertical, Edit, Loader2, Eye } from "lucide-react";
+import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ContractUpload } from "@/components/contract-upload";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/empty-state";
 import { LeaseForm, type LeaseFormValues } from "@/components/forms/lease-form";
@@ -15,7 +17,7 @@ import { useUser } from "@/contexts/user-context";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { LEASE_STATUS_LABELS, PAYMENT_CYCLE_LABELS, BILLING_MODE_LABELS } from "@/types";
 import type { Lease, LeaseStatus } from "@/types";
-import { generateBillPeriods } from "@/lib/billing";
+import { generateBillPeriods, calculateBillStatus } from "@/lib/billing";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -38,9 +40,41 @@ export default function LeasesPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [editing, setEditing] = useState<LeaseWithRelations | null>(null);
   const [viewing, setViewing] = useState<LeaseWithRelations | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | LeaseStatus>("all");
+  const [leaseAttachments, setLeaseAttachments] = useState<Array<{ id: string; file_name: string; file_url: string; created_at: string }>>([]);
+  const [leaseSignedUrls, setLeaseSignedUrls] = useState<Record<string, string>>({});
 
   const supabase = createClient();
+
+  const fetchLeaseAttachments = async (leaseId: string) => {
+    const { data } = await supabase
+      .from("attachments")
+      .select("id, file_name, file_url, created_at")
+      .eq("entity_type", "lease")
+      .eq("entity_id", leaseId)
+      .order("created_at", { ascending: false });
+    const atts = (data ?? []) as Array<{ id: string; file_name: string; file_url: string; created_at: string }>;
+    setLeaseAttachments(atts);
+    if (atts.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from("contracts")
+        .createSignedUrls(atts.map((a) => a.file_url), 3600);
+      const map: Record<string, string> = {};
+      signed?.forEach((s, idx) => {
+        if (s.signedUrl) map[atts[idx].id] = s.signedUrl;
+      });
+      setLeaseSignedUrls(map);
+    } else {
+      setLeaseSignedUrls({});
+    }
+  };
+
+  const openDetail = (lease: LeaseWithRelations) => {
+    setViewing(lease);
+    setDetailOpen(true);
+    fetchLeaseAttachments(lease.id);
+  };
 
   const fetchLeases = async () => {
     if (!householdId) return;
@@ -93,6 +127,7 @@ export default function LeasesPage() {
           values.billing_mode,
           values.rent_due_day
         );
+        const today = new Date();
         const billRows = periods.map((p) => ({
           lease_id: newLease.id,
           period_start: format(p.periodStart, "yyyy-MM-dd"),
@@ -105,7 +140,7 @@ export default function LeasesPage() {
           other_amount: 0,
           total_amount: p.rentAmount,
           paid_amount: 0,
-          status: "pending",
+          status: calculateBillStatus(p.rentAmount, 0, p.dueDate, today),
         }));
         const { error: billsErr } = await supabase.from("bills").insert(billRows);
         if (billsErr) {
@@ -125,6 +160,36 @@ export default function LeasesPage() {
     setFormOpen(false);
     setEditing(null);
     fetchLeases();
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    const target = leases.find((l) => l.id === deletingId);
+    const { error } = await supabase
+      .from("leases")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", deletingId);
+    if (error) {
+      toast.error(`删除失败：${error.message}`);
+    } else {
+      // 如果该租约对应的房源没有其他生效租约，把房源状态改回空置
+      if (target?.property_id) {
+        const { data: otherActive } = await supabase
+          .from("leases")
+          .select("id")
+          .eq("property_id", target.property_id)
+          .eq("status", "active")
+          .is("deleted_at", null)
+          .neq("id", deletingId)
+          .limit(1);
+        if (!otherActive || otherActive.length === 0) {
+          await supabase.from("properties").update({ status: "vacant" }).eq("id", target.property_id);
+        }
+      }
+      toast.success("租约已删除");
+      fetchLeases();
+    }
+    setDeletingId(null);
   };
 
   const handleTerminate = async (lease: LeaseWithRelations) => {
@@ -221,12 +286,12 @@ export default function LeasesPage() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setViewing(lease); setDetailOpen(true); }}>
+                        <DropdownMenuItem onClick={() => openDetail(lease)}>
                           <Eye className="mr-2 h-4 w-4" />
                           查看详情
                         </DropdownMenuItem>
@@ -242,6 +307,13 @@ export default function LeasesPage() {
                             办理退租
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeletingId(lease.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          删除
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -272,12 +344,12 @@ export default function LeasesPage() {
 
       {/* 详情弹窗 */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>租约详情</DialogTitle>
           </DialogHeader>
           {viewing && (
-            <div className="space-y-3 text-sm">
+            <div className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-y-2">
                 <span className="text-muted-foreground">房源</span>
                 <span className="font-medium">{viewing.property?.name ?? "—"}</span>
@@ -306,10 +378,70 @@ export default function LeasesPage() {
                   <p className="bg-muted rounded p-2 text-xs">{viewing.notes}</p>
                 </div>
               )}
+
+              {/* 合同 / 附件 */}
+              <div>
+                <p className="font-medium mb-2 flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  合同 / 附件
+                </p>
+                <ContractUpload
+                  propertyId={viewing.property_id}
+                  leaseOptions={[{ id: viewing.id, label: `本租约（${formatDate(viewing.start_date)} 起）` }]}
+                  onUploaded={() => fetchLeaseAttachments(viewing.id)}
+                />
+                {leaseAttachments.length > 0 && (
+                  <div className="mt-2 divide-y divide-border rounded-lg border border-border">
+                    {leaseAttachments.map((a) => {
+                      const href = leaseSignedUrls[a.id];
+                      return href ? (
+                        <a
+                          key={a.id}
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-muted/40 transition-colors text-xs"
+                        >
+                          <Paperclip className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="flex-1 truncate">{a.file_name}</span>
+                          <span className="text-muted-foreground shrink-0">{formatDate(a.created_at)}</span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        </a>
+                      ) : (
+                        <div key={a.id} className="flex items-center gap-2 px-3 py-2 text-xs opacity-60">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                          <span className="flex-1 truncate">{a.file_name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 删除确认 */}
+      <AlertDialog open={!!deletingId} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除这份租约？</AlertDialogTitle>
+            <AlertDialogDescription>
+              删除后，该租约及其下面所有账单都不再显示。如果该房源没有其他生效租约，房源状态会自动改回「空置」。删除是软删除，数据仍保留在数据库里（防止误删），如需彻底清理请告诉我。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
