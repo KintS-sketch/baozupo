@@ -54,3 +54,6 @@ dev-server.log
 # 本地生成的 QR 码（不部署到生产）
 public/qr-baozupo.png
 /build-tools
+
+# 软著申请材料（本地生成，不入库）
+/软著申请材料/
