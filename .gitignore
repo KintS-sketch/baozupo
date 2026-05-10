@@ -37,3 +37,16 @@ next-env.d.ts
 # supabase
 supabase/.branches
 supabase/.temp
+
+# claude code 本地配置
+.claude/settings.local.json
+
+# 设计稿原始文件 / 提取产物（体积大，不进版本控制）
+.design-extract/
+_ Tend UI _ _ _.html
+extract-design.mjs
+转账截图.png
+
+# 开发期日志
+dev-server.log
+*.log
