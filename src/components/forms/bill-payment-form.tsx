@@ -217,7 +217,7 @@ export function BillPaymentForm({ bill, tenantName, propertyName, onSubmit, onCa
           )}
         />
 
-        <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2 sticky bottom-0 bg-card pb-1">
+        <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
           <Button
             type="button"
             variant="outline"
