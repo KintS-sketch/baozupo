@@ -12,6 +12,7 @@ import {
   Gauge,
   Bell,
   UsersRound,
+  Calculator,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/payments", label: "收款记录", icon: CreditCard },
   { href: "/meters", label: "抄表记录", icon: Gauge },
   { href: "/reminders", label: "提醒中心", icon: Bell },
+  { href: "/tax", label: "个税助手", icon: Calculator },
   { href: "/household", label: "家庭组", icon: UsersRound },
 ];
 

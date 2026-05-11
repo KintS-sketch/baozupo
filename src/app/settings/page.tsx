@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, LogOut, ChevronRight, Loader2, Sparkles, CreditCard, FileText, Bell, Gauge, MessageCircle, Check } from "lucide-react";
+import { User, LogOut, ChevronRight, Loader2, CreditCard, FileText, Bell, Gauge, MessageCircle, Check, Calculator } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,6 +29,7 @@ const WECHAT_STATUS_TOAST: Record<string, { type: "success" | "error" | "warning
 };
 
 const QUICK_LINKS = [
+  { href: "/tax", label: "个税助手", icon: Calculator, desc: "年度租金汇总，方便申报个税" },
   { href: "/reminders", label: "提醒中心", icon: Bell, desc: "查看待处理提醒" },
   { href: "/leases", label: "租约管理", icon: FileText, desc: "查看和管理租约" },
   { href: "/meters", label: "抄表记录", icon: Gauge, desc: "水电气表读数" },
@@ -273,58 +274,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* AI 功能 */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            AI 功能
-          </CardTitle>
-          <CardDescription>由阿里通义千问驱动，国内访问稳定</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            { name: "付款截图识别", desc: "上传微信/支付宝截图，自动识别金额、时间、付款方式" },
-            { name: "AI 抄表识别", desc: "拍水电气表照片，自动填入读数（在抄表表单内使用）" },
-          ].map((feature) => (
-            <div key={feature.name} className="flex items-center justify-between py-1">
-              <div>
-                <p className="text-sm font-medium">{feature.name}</p>
-                <p className="text-xs text-muted-foreground">{feature.desc}</p>
-              </div>
-              <Badge variant="success">已上线</Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* 数据管理 */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">数据管理</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between py-1">
-            <div>
-              <p className="text-sm">数据导出</p>
-              <p className="text-xs text-muted-foreground">导出账单记录为 Excel</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">即将上线</Badge>
-            </div>
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between py-1">
-            <div>
-              <p className="text-sm">提醒通知</p>
-              <p className="text-xs text-muted-foreground">收租日、到期日提醒设置</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">即将上线</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* 关于 */}
       <Card>
