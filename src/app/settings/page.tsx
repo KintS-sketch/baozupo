@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { User, LogOut, ChevronRight, Loader2, Sparkles, CreditCard, FileText, Bell, Gauge } from "lucide-react";
+import { useEffect, useState } from "react";
+import { User, LogOut, ChevronRight, Loader2, Sparkles, CreditCard, FileText, Bell, Gauge, MessageCircle, Check } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,6 +11,22 @@ import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+
+interface WechatBindingState {
+  bound: boolean;
+  nickname: string | null;
+  boundAt: string | null;
+}
+
+const WECHAT_STATUS_TOAST: Record<string, { type: "success" | "error" | "warning"; msg: string }> = {
+  bound:                { type: "success", msg: "微信绑定成功，到期提醒会自动推送给你" },
+  state_invalid:        { type: "error",   msg: "授权链接已过期，请重新发起绑定" },
+  code_missing:         { type: "error",   msg: "微信授权未完成，请重试" },
+  exchange_failed:      { type: "error",   msg: "微信换取信息失败，请稍后重试" },
+  already_bound_other:  { type: "warning", msg: "该微信已绑定其他账号，请先解除再试" },
+  db_error:             { type: "error",   msg: "服务端保存失败，请重试" },
+  server_error:         { type: "error",   msg: "服务端配置异常，请联系管理员" },
+};
 
 const QUICK_LINKS = [
   { href: "/reminders", label: "提醒中心", icon: Bell, desc: "查看待处理提醒" },
@@ -22,14 +38,74 @@ const QUICK_LINKS = [
 export default function SettingsPage() {
   const { user, householdId } = useUser();
   const router = useRouter();
+  const supabase = createClient();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [wechat, setWechat] = useState<WechatBindingState>({ bound: false, nickname: null, boundAt: null });
+  const [wechatBusy, setWechatBusy] = useState(false);
+
+  // 读 user_profiles 看微信绑定状态
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("user_profiles")
+        .select("wechat_openid, wechat_nickname, wechat_bound_at")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setWechat({
+        bound: !!data?.wechat_openid,
+        nickname: data?.wechat_nickname ?? null,
+        boundAt: data?.wechat_bound_at ?? null,
+      });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // 处理 OAuth 回调后的 toast 提示
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const status = url.searchParams.get("wechat");
+    if (!status) return;
+    const cfg = WECHAT_STATUS_TOAST[status];
+    if (cfg) {
+      if (cfg.type === "success") toast.success(cfg.msg);
+      else if (cfg.type === "warning") toast.warning(cfg.msg);
+      else toast.error(cfg.msg);
+    }
+    url.searchParams.delete("wechat");
+    window.history.replaceState({}, "", url.toString());
+  }, []);
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    const supabase = createClient();
     await supabase.auth.signOut();
     toast.success("已退出登录");
     router.push("/login");
+  };
+
+  const handleBindWechat = () => {
+    // 跳转到服务端发起 OAuth，必须 full page navigation
+    window.location.href = "/api/wechat/oauth/init";
+  };
+
+  const handleUnbindWechat = async () => {
+    setWechatBusy(true);
+    try {
+      const resp = await fetch("/api/wechat/unbind", { method: "POST" });
+      const json = await resp.json();
+      if (!resp.ok || !json.success) {
+        toast.error(json.error ?? "解绑失败");
+        return;
+      }
+      toast.success("已解除微信绑定");
+      setWechat({ bound: false, nickname: null, boundAt: null });
+    } finally {
+      setWechatBusy(false);
+    }
   };
 
   return (
@@ -116,6 +192,72 @@ export default function SettingsPage() {
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </Link>
+        </CardContent>
+      </Card>
+
+      {/* 微信提醒 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-[#07C160]" />
+            微信自动提醒
+            {wechat.bound && (
+              <Badge variant="success" className="ml-1 gap-1">
+                <Check className="h-3 w-3" />
+                已绑定
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            {wechat.bound
+              ? "收租日 / 抄表日 / 合同到期会自动推送到你的微信"
+              : "绑定微信后，到期提醒直接推送，再也不会忘"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {wechat.bound ? (
+            <>
+              <div className="flex items-center gap-3 rounded-lg bg-[#07C160]/5 p-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#07C160]/15 text-[#07C160]">
+                  <MessageCircle className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {wechat.nickname ?? "微信用户"}
+                  </p>
+                  {wechat.boundAt && (
+                    <p className="text-xs text-muted-foreground">
+                      绑定于 {new Date(wechat.boundAt).toLocaleDateString("zh-CN")}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={handleUnbindWechat}
+                disabled={wechatBusy}
+              >
+                {wechatBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                解除微信绑定
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                <p>📌 必须在<strong>微信内</strong>打开本页面才能完成绑定</p>
+                <p>📌 点击下方按钮 → 微信会弹出授权框 → 同意即可</p>
+              </div>
+              <Button
+                className="w-full bg-[#07C160] hover:bg-[#07C160]/90"
+                onClick={handleBindWechat}
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                绑定微信，开启自动提醒
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 
