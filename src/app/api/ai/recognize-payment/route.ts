@@ -3,15 +3,13 @@ import type {
   AiPaymentRecognitionResult,
   AiRecognizePaymentResponse,
 } from "@/types/ai";
+import { getVisionProvider, VisionProviderError, VisionMediaType } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
-type AllowedMediaType = (typeof ALLOWED_MEDIA_TYPES)[number];
-
-const MODEL = "claude-sonnet-4-6";
+const ALLOWED_MEDIA_TYPES: VisionMediaType[] = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 const SYSTEM_PROMPT = `你是一个识别中国大陆收付款截图的助手。用户会上传微信支付、支付宝、银行转账等收付款凭证截图。请提取以下字段，并以严格的 JSON 格式返回，不要包含任何解释文字、不要使用 markdown 代码块包裹：
 
@@ -30,6 +28,8 @@ const SYSTEM_PROMPT = `你是一个识别中国大陆收付款截图的助手。
 - method 推断：微信/微信支付 → wechat；支付宝 → alipay；银行/转账/借记卡 → bank；其他 → other
 - 只输出 JSON，不要任何额外文字`;
 
+const USER_PROMPT = "请识别这张收付款截图。";
+
 interface RequestBody {
   bill_id?: string;
   image_base64?: string;
@@ -37,12 +37,12 @@ interface RequestBody {
 }
 
 export async function POST(request: Request): Promise<NextResponse<AiRecognizePaymentResponse>> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { success: false, error: "服务端未配置 ANTHROPIC_API_KEY，请联系管理员" },
-      { status: 503 }
-    );
+  let provider;
+  try {
+    provider = getVisionProvider();
+  } catch (err) {
+    const e = err as VisionProviderError;
+    return NextResponse.json({ success: false, error: e.friendly }, { status: e.httpStatus });
   }
 
   let body: RequestBody;
@@ -57,7 +57,7 @@ export async function POST(request: Request): Promise<NextResponse<AiRecognizePa
   if (!image_base64) {
     return NextResponse.json({ success: false, error: "缺少 image_base64 字段" }, { status: 400 });
   }
-  if (!media_type || !ALLOWED_MEDIA_TYPES.includes(media_type as AllowedMediaType)) {
+  if (!media_type || !ALLOWED_MEDIA_TYPES.includes(media_type as VisionMediaType)) {
     return NextResponse.json(
       { success: false, error: `media_type 必须是 ${ALLOWED_MEDIA_TYPES.join(" / ")}` },
       { status: 400 }
@@ -72,67 +72,28 @@ export async function POST(request: Request): Promise<NextResponse<AiRecognizePa
     );
   }
 
-  let claudeResp: Response;
+  let recognition;
   try {
-    claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 512,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type, data: image_base64 },
-              },
-              { type: "text", text: "请识别这张收付款截图。" },
-            ],
-          },
-        ],
-      }),
+    recognition = await provider.recognize({
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: USER_PROMPT,
+      imageBase64: image_base64,
+      mediaType: media_type as VisionMediaType,
+      maxTokens: 512,
     });
   } catch (err) {
-    console.error("[ai/recognize-payment] fetch failed:", err);
+    const e = err as VisionProviderError;
+    console.error("[ai/recognize-payment] provider error:", e.message);
     return NextResponse.json(
-      { success: false, error: "调用 AI 服务失败，请稍后重试" },
-      { status: 502 }
+      { success: false, error: e.friendly },
+      { status: e.httpStatus }
     );
   }
 
-  if (!claudeResp.ok) {
-    const errText = await claudeResp.text().catch(() => "");
-    console.error("[ai/recognize-payment] Claude API error:", claudeResp.status, errText);
-
-    let friendly = `AI 服务返回错误：${claudeResp.status}`;
-    const lower = errText.toLowerCase();
-    if (lower.includes("credit balance is too low") || lower.includes("billing")) {
-      friendly = "Anthropic 账户余额不足，请前往 console.anthropic.com 充值后再试";
-    } else if (claudeResp.status === 401) {
-      friendly = "ANTHROPIC_API_KEY 无效，请检查后台配置";
-    } else if (claudeResp.status === 403) {
-      friendly = "AI 服务拒绝请求，可能是账户计划不支持或余额不足，请检查 Anthropic 账户";
-    } else if (claudeResp.status === 429) {
-      friendly = "AI 调用过于频繁，请稍后再试";
-    }
-
-    return NextResponse.json({ success: false, error: friendly }, { status: 502 });
-  }
-
-  const claudeJson = (await claudeResp.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens: number; output_tokens: number };
-  };
-
-  const text = claudeJson.content?.find((b) => b.type === "text")?.text?.trim() ?? "";
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const cleaned = recognition.rawText
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
 
   let parsed: Record<string, unknown>;
   try {
@@ -160,12 +121,11 @@ export async function POST(request: Request): Promise<NextResponse<AiRecognizePa
     confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
   };
 
-  const usage = claudeJson.usage;
   return NextResponse.json({
     success: true,
     data: result,
-    model: MODEL,
-    tokens_used: usage ? usage.input_tokens + usage.output_tokens : undefined,
+    model: recognition.model,
+    tokens_used: recognition.tokensUsed,
   });
 }
 
