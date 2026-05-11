@@ -205,8 +205,8 @@ interface LeaseRow {
   lease_tenants: Array<{ is_primary: boolean; tenant: { name: string } | null }>;
 }
 
-// 两个触发点：D-14（提前半月）+ D-1（提前 1 天）
-const LEASE_OFFSETS = [14, 1] as const;
+// 三个触发点：D-30（提前一月）+ D-14（提前半月）+ D-1（提前 1 天）
+const LEASE_OFFSETS = [30, 14, 1] as const;
 
 async function pushLeaseReminders(
   admin: Admin,

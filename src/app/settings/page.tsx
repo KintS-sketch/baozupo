@@ -235,7 +235,7 @@ export default function SettingsPage() {
               <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed">
                 <p className="font-medium text-foreground mb-1">📅 推送时机（每天早 8 点扫描一次）</p>
                 <p>· 账单到期前 1 天 · 当天 · 逾期 3 天</p>
-                <p>· 租约到期前 14 天 · 前 1 天</p>
+                <p>· 租约到期前 30 天 · 14 天 · 前 1 天</p>
                 <p>· 上次抄表 ≥ 28 天</p>
               </div>
               <Button
@@ -258,7 +258,7 @@ export default function SettingsPage() {
               <div className="rounded-lg bg-[#FBEEE9] border border-[#C8553D]/20 p-3 text-xs text-foreground/80 leading-relaxed">
                 <p className="font-medium text-[#C8553D] mb-1">📅 绑定后会自动推送（不会骚扰）</p>
                 <p>· 账单到期前 1 天 · 当天 · 逾期 3 天</p>
-                <p>· 租约到期前 14 天 · 前 1 天</p>
+                <p>· 租约到期前 30 天 · 14 天 · 前 1 天</p>
                 <p>· 上次抄表 ≥ 28 天</p>
               </div>
               <Button

@@ -182,7 +182,7 @@ export async function sendLeaseExpiryReminder(opts: {
   leaseId: string;
   baseUrl: string;
 }): Promise<SendTemplateResult> {
-  // 两档：D-14（提前半月）/ D-1（提前 1 天）
+  // 三档：D-30（提前一月）/ D-14（提前半月）/ D-1（提前 1 天）
   const first =
     opts.daysLeft <= 1
       ? "🌾 明天合同到期"
@@ -191,7 +191,9 @@ export async function sendLeaseExpiryReminder(opts: {
   const remark =
     opts.daysLeft <= 1
       ? "建议今天就确认续约 / 退租安排"
-      : "可以开始沟通续约 / 退租意向，留出充足时间";
+      : opts.daysLeft <= 14
+        ? "建议本周内联系租客，沟通续约意向"
+        : "可以提前打个招呼，预留充足沟通时间";
 
   return sendTemplateMessage({
     templateKey: "lease_expiry",
