@@ -17,7 +17,18 @@ import {
   Plus,
   Paperclip,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -99,8 +110,37 @@ export default function PropertyDetailPage({
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [deletingAttachment, setDeletingAttachment] = useState<AttachmentRow | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
   const supabase = createClient();
+
+  const handleDeleteAttachment = async () => {
+    if (!deletingAttachment) return;
+    setDeletingBusy(true);
+    try {
+      const { error: storageErr } = await supabase.storage
+        .from("contracts")
+        .remove([deletingAttachment.file_url]);
+      if (storageErr && !storageErr.message?.toLowerCase().includes("not found")) {
+        toast.error(`Storage 删除失败：${storageErr.message}`);
+        return;
+      }
+      const { error: dbErr } = await supabase
+        .from("attachments")
+        .delete()
+        .eq("id", deletingAttachment.id);
+      if (dbErr) {
+        toast.error(`记录删除失败：${dbErr.message}`);
+        return;
+      }
+      toast.success("已删除");
+      setDeletingAttachment(null);
+      fetchAll();
+    } finally {
+      setDeletingBusy(false);
+    }
+  };
 
   const fetchAll = async () => {
     if (!householdId) return;
@@ -477,38 +517,53 @@ export default function PropertyDetailPage({
             <CardContent className="divide-y divide-border p-0">
               {attachments.map((a) => {
                 const href = signedUrls[a.id];
-                const Inner = (
-                  <>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Paperclip className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{a.file_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.entity_type === "lease" ? "租约附件" : "房源附件"} ·{" "}
-                        {formatDate(a.created_at)}
-                      </p>
-                    </div>
-                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                  </>
-                );
-                return href ? (
-                  <a
-                    key={a.id}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
-                  >
-                    {Inner}
-                  </a>
-                ) : (
+                return (
                   <div
                     key={a.id}
-                    className="flex items-center gap-3 px-4 py-3 opacity-60"
-                    title="链接生成失败，刷新页面重试"
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
                   >
-                    {Inner}
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                      <Paperclip className="h-4 w-4" />
+                    </div>
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 min-w-0 flex items-center gap-2 group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate group-hover:underline">
+                            {a.file_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {a.entity_type === "lease" ? "租约附件" : "房源附件"} ·{" "}
+                            {formatDate(a.created_at)}
+                          </p>
+                        </div>
+                        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </a>
+                    ) : (
+                      <div
+                        className="flex-1 min-w-0 opacity-60"
+                        title="链接生成失败，刷新页面重试"
+                      >
+                        <p className="text-sm font-medium truncate">{a.file_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {a.entity_type === "lease" ? "租约附件" : "房源附件"} ·{" "}
+                          {formatDate(a.created_at)}
+                        </p>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDeletingAttachment(a)}
+                      className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="删除附件"
+                      aria-label="删除附件"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 );
               })}
@@ -516,6 +571,35 @@ export default function PropertyDetailPage({
           </Card>
         )}
       </section>
+
+      {/* 删除附件确认弹窗 */}
+      <AlertDialog
+        open={deletingAttachment !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingBusy) setDeletingAttachment(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除附件？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将永久删除 <strong>{deletingAttachment?.file_name}</strong>，包括云端存储的文件。
+              此操作不可恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingBusy}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAttachment}
+              disabled={deletingBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 编辑弹窗 */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

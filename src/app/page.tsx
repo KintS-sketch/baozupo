@@ -160,11 +160,13 @@ export default function DashboardPage() {
     if (h < 22) return { hi: "晚上好", sub: "辛苦一天啦，慢慢忙不急" };
     return { hi: "夜里好", sub: "做完这点就早点休息" };
   })();
-  // 称呼兜底：空 / 全数字 / 4 位以上数字开头都不好看，统一回退到 "房东"（暖心 + 身份认同）
+  // 称呼兜底：只在前缀看起来像"名字"时显示，否则回退到 "房东"（暖心 + 身份认同）
+  // 像名字的定义：① 2-4 位纯中文，或 ② 2-10 位纯英文字母（无数字 / 下划线 / 点号 / 加号 等账号字符）
   const userName = (() => {
     const local = user?.email?.split("@")[0] ?? "";
-    if (!local || /^\d+$/.test(local) || /^\d{4,}/.test(local)) return "房东";
-    return local;
+    const isChineseName = /^[一-龥]{2,4}$/.test(local);
+    const isEnglishName = /^[a-zA-Z]{2,10}$/.test(local);
+    return isChineseName || isEnglishName ? local : "房东";
   })();
 
   // 状态相关的鼓励语 — 让 app 像有人在跟你说话
