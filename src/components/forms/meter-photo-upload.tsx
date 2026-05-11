@@ -106,15 +106,20 @@ export function MeterPhotoUpload({
       />
 
       {!previewUrl ? (
-        <button
-          type="button"
-          onClick={handlePick}
-          disabled={loading || disabled}
-          className="flex w-full items-center justify-center gap-2 py-2 text-sm font-medium text-primary disabled:opacity-50"
-        >
-          <Sparkles className="h-4 w-4" />
-          拍照识别读数（AI 自动填入）
-        </button>
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={handlePick}
+            disabled={loading || disabled}
+            className="flex w-full items-center justify-center gap-2 py-2 text-sm font-medium text-primary disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4" />
+            拍照识别读数（AI 自动填入）
+          </button>
+          <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+            💡 擦干表盘 · 正对字轮 · 光线充足 · 距离 10-20cm 效果最好
+          </p>
+        </div>
       ) : (
         <div className="flex items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
