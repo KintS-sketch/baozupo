@@ -18,7 +18,9 @@ import {
   METER_TYPE_DEFAULT_UNIT_PRICE,
 } from "@/types";
 import type { MeterType, Property } from "@/types";
+import type { AiMeterRecognitionResult } from "@/types/ai";
 import { format } from "date-fns";
+import { MeterPhotoUpload } from "./meter-photo-upload";
 
 const schema = z.object({
   property_id: z.string().min(1, "请选择房源"),
@@ -42,6 +44,10 @@ export interface MeterFormSubmit {
   usage: number | null;
   amount: number | null;
   notes: string | null;
+  ai_recognized: boolean;
+  ai_confidence: number | null;
+  ai_provider: string | null;
+  ai_raw_value: number | null;
 }
 
 interface MeterFormProps {
@@ -81,6 +87,23 @@ export function MeterForm({
   const unitPriceField = form.watch("unit_price");
 
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [aiMeta, setAiMeta] = useState<{
+    confidence: number;
+    rawValue: number;
+    provider: string;
+  } | null>(null);
+
+  const handleAiRecognized = (result: AiMeterRecognitionResult) => {
+    form.setValue("value", result.value as unknown as number, { shouldValidate: true });
+    if (result.type !== "unknown") {
+      form.setValue("type", result.type);
+    }
+    setAiMeta({
+      confidence: result.confidence,
+      rawValue: result.value,
+      provider: "auto",
+    });
+  };
 
   // 房源/表类型变化时：自动填上次读数 + 默认单价
   useEffect(() => {
@@ -149,6 +172,10 @@ export function MeterForm({
       usage,
       amount,
       notes: values.notes?.trim() || null,
+      ai_recognized: aiMeta !== null,
+      ai_confidence: aiMeta?.confidence ?? null,
+      ai_provider: aiMeta?.provider ?? null,
+      ai_raw_value: aiMeta?.rawValue ?? null,
     });
   };
 
@@ -220,6 +247,12 @@ export function MeterForm({
             )}
           />
         </div>
+
+        <MeterPhotoUpload
+          hintType={meterType as MeterType}
+          onRecognized={handleAiRecognized}
+          disabled={isSubmitting}
+        />
 
         <div className="grid grid-cols-2 gap-4">
           <FormField

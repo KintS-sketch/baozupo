@@ -120,6 +120,10 @@ export default function MetersPage() {
       usage: values.usage,
       amount: values.amount,
       notes: values.notes,
+      ai_recognized: values.ai_recognized,
+      ai_confidence: values.ai_confidence,
+      ai_provider: values.ai_provider,
+      ai_raw_value: values.ai_raw_value,
     });
 
     if (error) {

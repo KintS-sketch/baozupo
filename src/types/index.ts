@@ -152,6 +152,10 @@ export interface MeterReading {
   amount: number | null;
   notes: string | null;
   image_url: string | null;
+  ai_recognized: boolean;
+  ai_confidence: number | null;
+  ai_provider: string | null;
+  ai_raw_value: number | null;
   created_at: string;
 }
 
