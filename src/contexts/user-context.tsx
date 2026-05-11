@@ -3,24 +3,44 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { type User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { toSubscription, type Subscription } from "@/lib/subscription";
 
 interface UserContextType {
   user: User | null;
   householdId: string | null;
+  subscription: Subscription | null;
   loading: boolean;
+  refreshSubscription: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType>({
   user: null,
   householdId: null,
+  subscription: null,
   loading: true,
+  refreshSubscription: async () => {},
 });
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [householdId, setHouseholdId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const initRef = useRef(false);
+
+  const fetchSubscription = async (userId: string) => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("plan, source, started_at, expires_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    setSubscription(toSubscription(data));
+  };
+
+  const refreshSubscription = async () => {
+    if (user) await fetchSubscription(user.id);
+  };
 
   useEffect(() => {
     // 守卫：避免 React 19 StrictMode 双重 effect 触发
@@ -76,9 +96,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         if (u) {
           try {
-            await ensureHousehold(u.id);
+            await Promise.all([
+              ensureHousehold(u.id),
+              fetchSubscription(u.id),
+            ]);
           } catch (err) {
-            console.error("[UserCtx] ensureHousehold error:", err);
+            console.error("[UserCtx] post-init error:", err);
           }
         }
       } catch (err) {
@@ -88,23 +111,28 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     })();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
         setUser(null);
         setHouseholdId(null);
+        setSubscription(null);
       } else if (event === "SIGNED_IN" && session?.user) {
         setUser(session.user);
-        ensureHousehold(session.user.id).catch((err) =>
-          console.error("[UserCtx] ensureHousehold (SIGNED_IN) error:", err)
+        Promise.all([
+          ensureHousehold(session.user.id),
+          fetchSubscription(session.user.id),
+        ]).catch((err) =>
+          console.error("[UserCtx] post SIGNED_IN error:", err)
         );
       }
     });
 
-    void subscription;
+    void authSub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, householdId, loading }}>
+    <UserContext.Provider value={{ user, householdId, subscription, loading, refreshSubscription }}>
       {children}
     </UserContext.Provider>
   );

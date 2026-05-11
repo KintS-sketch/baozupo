@@ -13,6 +13,7 @@ import {
   Bell,
   UsersRound,
   Calculator,
+  Sparkles,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -88,6 +89,18 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="px-3 py-4 border-t border-border space-y-1">
+        <Link
+          href="/subscription"
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            pathname.startsWith("/subscription")
+              ? "bg-amber-500/10 text-amber-700"
+              : "text-amber-700 hover:bg-amber-50"
+          )}
+        >
+          <Sparkles className="h-4 w-4 shrink-0" />
+          升级 Pro
+        </Link>
         <Link
           href="/settings"
           className={cn(

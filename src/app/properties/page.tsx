@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Building2, MoreVertical, Edit, Trash2, Loader2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +11,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/empty-state";
+import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { PropertyForm, type PropertyFormValues } from "@/components/forms/property-form";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { PROPERTY_STATUS_LABELS } from "@/types";
 import type { Property } from "@/types";
+import { canAddProperty, isProActive, PLAN_LIMITS } from "@/lib/subscription";
 import { toast } from "sonner";
 
 const STATUS_BADGE_VARIANTS: Record<string, "success" | "muted" | "warning"> = {
@@ -24,7 +27,8 @@ const STATUS_BADGE_VARIANTS: Record<string, "success" | "muted" | "warning"> = {
 };
 
 export default function PropertiesPage() {
-  const { householdId, loading: userLoading } = useUser();
+  const { householdId, subscription, loading: userLoading } = useUser();
+  const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -32,6 +36,10 @@ export default function PropertiesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const supabase = createClient();
+  const freeLimit = PLAN_LIMITS.free.maxProperties;
+  const isPro = isProActive(subscription);
+  const canAdd = canAddProperty(subscription, properties.length);
+  const reachingLimit = !isPro && properties.length >= freeLimit;
 
   const fetchProperties = async () => {
     if (!householdId) return;
@@ -105,7 +113,19 @@ export default function PropertiesPage() {
   };
 
   const openEdit = (p: Property) => { setEditing(p); setFormOpen(true); };
-  const openAdd = () => { setEditing(null); setFormOpen(true); };
+  const openAdd = () => {
+    if (!canAdd) {
+      toast.warning(`免费版仅限 ${freeLimit} 套房源，升级 Pro 解锁无限`, {
+        action: {
+          label: "查看 Pro",
+          onClick: () => router.push("/subscription"),
+        },
+      });
+      return;
+    }
+    setEditing(null);
+    setFormOpen(true);
+  };
 
   if (userLoading || loading) {
     return (
@@ -117,16 +137,31 @@ export default function PropertiesPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold">房源管理</h1>
-          <p className="text-sm text-muted-foreground">共 {properties.length} 套房源</p>
+          <p className="text-sm text-muted-foreground">
+            {isPro
+              ? `共 ${properties.length} 套房源`
+              : `已用 ${properties.length} / ${freeLimit} 套（免费版）`}
+          </p>
         </div>
         <Button onClick={openAdd}>
           <Plus className="h-4 w-4 mr-1" />
           添加房源
         </Button>
       </div>
+
+      {reachingLimit && (
+        <div className="mb-4">
+          <UpgradePrompt
+            title="免费版房源已达上限"
+            description="升级 Pro 解锁无限房源 · 早鸟年卡 ¥69 仅前 100 名"
+            ctaLabel="查看 Pro 详情"
+            compact
+          />
+        </div>
+      )}
 
       {properties.length === 0 ? (
         <EmptyState

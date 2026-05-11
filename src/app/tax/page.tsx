@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
+import { ProBadge } from "@/components/pro-badge";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { formatCurrency } from "@/lib/format";
@@ -277,19 +278,27 @@ export default function TaxPage() {
           导出 Excel（{year} 年度汇总）
         </Button>
 
-        <Card className="border-primary/30 bg-primary/5">
+        <Card className="border-amber-500/30 bg-gradient-to-br from-amber-50 to-orange-50/50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary shrink-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 text-white shrink-0">
                 <Sparkles className="h-4 w-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">想自动算税额 + 生成申报报告？</p>
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  想自动算税额 + 生成申报报告？
+                  <ProBadge />
+                </p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                   Pro 版按你所在城市自动算个人所得税、房产税、增值税，
                   一键生成《年度租赁所得报告》PDF，拿去申报。
                 </p>
-                <p className="text-xs text-primary font-medium mt-2">即将上线 · 报税季前推出</p>
+                <Link
+                  href="/subscription"
+                  className="inline-block text-xs text-orange-700 font-medium mt-2 hover:underline"
+                >
+                  即将上线 · 报税季前推出 → 提前了解 Pro
+                </Link>
               </div>
             </div>
           </CardContent>

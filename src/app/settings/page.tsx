@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, LogOut, ChevronRight, Loader2, CreditCard, FileText, Bell, Gauge, MessageCircle, Check, Calculator } from "lucide-react";
+import { User, LogOut, ChevronRight, Loader2, CreditCard, FileText, Bell, Gauge, MessageCircle, Check, Calculator, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
+import { ProBadge } from "@/components/pro-badge";
 import { toast } from "sonner";
 
 interface WechatBindingState {
@@ -37,9 +38,11 @@ const QUICK_LINKS = [
 ];
 
 export default function SettingsPage() {
-  const { user, householdId } = useUser();
+  const { user, householdId, subscription } = useUser();
   const router = useRouter();
   const supabase = createClient();
+  const isPro = subscription?.plan === "pro" &&
+    (!subscription.expiresAt || new Date(subscription.expiresAt).getTime() > Date.now());
   const [loggingOut, setLoggingOut] = useState(false);
   const [wechat, setWechat] = useState<WechatBindingState>({ bound: false, nickname: null, boundAt: null });
   const [wechatBusy, setWechatBusy] = useState(false);
@@ -166,6 +169,37 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* 订阅状态 */}
+      <Card className={isPro ? "border-amber-500/40 bg-amber-50/40" : ""}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className={`h-4 w-4 ${isPro ? "text-amber-500" : "text-muted-foreground"}`} />
+            订阅状态
+            {isPro ? (
+              <Badge className="bg-amber-500 hover:bg-amber-500">Pro</Badge>
+            ) : (
+              <Badge variant="secondary">免费版</Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            {isPro
+              ? "感谢你的支持，已解锁全部 Pro 功能 🌱"
+              : "升级 Pro 解锁无限房源 · 微信自动提醒 · 个税 Pro"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/subscription"
+            className="flex items-center justify-between py-1.5 hover:bg-secondary/40 rounded-lg px-2 -mx-2 transition-colors"
+          >
+            <span className="text-sm">
+              {isPro ? "查看 / 管理订阅" : "查看 Pro 详情"}
+            </span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        </CardContent>
+      </Card>
+
       {/* 家庭组协同 */}
       <Card>
         <CardHeader className="pb-3">
@@ -202,6 +236,7 @@ export default function SettingsPage() {
           <CardTitle className="text-base flex items-center gap-2">
             <MessageCircle className="h-4 w-4 text-[#07C160]" />
             微信自动提醒
+            <ProBadge />
             {wechat.bound && (
               <Badge variant="success" className="ml-1 gap-1">
                 <Check className="h-3 w-3" />
