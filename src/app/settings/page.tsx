@@ -280,20 +280,19 @@ export default function SettingsPage() {
             <Sparkles className="h-4 w-4 text-primary" />
             AI 功能
           </CardTitle>
-          <CardDescription>智能截图识别和自动填写（即将上线）</CardDescription>
+          <CardDescription>由阿里通义千问驱动，国内访问稳定</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {[
-            { name: "付款截图识别", desc: "自动识别微信/支付宝截图中的金额和时间" },
-            { name: "合同智能识别", desc: "上传租约合同，自动提取关键信息" },
-            { name: "智能催收提醒", desc: "AI 分析收租模式，智能生成提醒" },
+            { name: "付款截图识别", desc: "上传微信/支付宝截图，自动识别金额、时间、付款方式" },
+            { name: "AI 抄表识别", desc: "拍水电气表照片，自动填入读数（在抄表表单内使用）" },
           ].map((feature) => (
             <div key={feature.name} className="flex items-center justify-between py-1">
               <div>
                 <p className="text-sm font-medium">{feature.name}</p>
                 <p className="text-xs text-muted-foreground">{feature.desc}</p>
               </div>
-              <Badge variant="secondary">开发中</Badge>
+              <Badge variant="success">已上线</Badge>
             </div>
           ))}
         </CardContent>

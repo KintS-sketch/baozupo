@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, Paperclip, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import type { Lease, Property, Tenant } from "@/types";
+
+const CONTRACT_MAX_BYTES = 10 * 1024 * 1024;
+const CONTRACT_ACCEPT = "image/*,application/pdf";
+
+export interface LeaseFormExtras {
+  contractFile: File | null;
+}
 
 const schema = z.object({
   property_id: z.string().min(1, "请选择房源"),
@@ -35,7 +42,7 @@ export type LeaseFormValues = z.infer<typeof schema>;
 
 interface LeaseFormProps {
   defaultValues?: Partial<Lease & { tenant_id?: string }>;
-  onSubmit: (values: LeaseFormValues) => Promise<void>;
+  onSubmit: (values: LeaseFormValues, extras: LeaseFormExtras) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -43,7 +50,25 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   const { householdId } = useUser();
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [contractFile, setContractFile] = useState<File | null>(null);
+  const contractInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+  const isEditing = !!defaultValues?.id;
+
+  const handlePickContract = () => contractInputRef.current?.click();
+
+  const handleContractChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > CONTRACT_MAX_BYTES) {
+      alert(`合同文件不能超过 10MB（当前 ${(file.size / 1024 / 1024).toFixed(1)}MB）`);
+      return;
+    }
+    setContractFile(file);
+  };
+
+  const handleSubmitWithExtras = (values: LeaseFormValues) =>
+    onSubmit(values, { contractFile });
 
   const form = useForm<LeaseFormValues>({
     resolver: zodResolver(schema),
@@ -80,7 +105,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(handleSubmitWithExtras)} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -252,11 +277,63 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
           )}
         />
 
+        {!isEditing && (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Paperclip className="h-3.5 w-3.5" />
+              <span>合同附件（可选，租约创建后自动关联）</span>
+            </div>
+            <input
+              ref={contractInputRef}
+              type="file"
+              accept={CONTRACT_ACCEPT}
+              className="hidden"
+              onChange={handleContractChange}
+            />
+            {contractFile ? (
+              <div className="flex items-center gap-2 rounded-md bg-white border p-2">
+                <Paperclip className="h-3.5 w-3.5 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{contractFile.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {(contractFile.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 shrink-0"
+                  onClick={() => {
+                    setContractFile(null);
+                    if (contractInputRef.current) contractInputRef.current.value = "";
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={handlePickContract}
+                disabled={isSubmitting}
+              >
+                <Upload className="mr-1 h-3.5 w-3.5" />
+                选择合同文件（PDF / 图片，≤10MB）
+              </Button>
+            )}
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>取消</Button>
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {defaultValues?.id ? "保存修改" : "创建租约"}
+            {isEditing ? "保存修改" : "创建租约"}
           </Button>
         </div>
       </form>

@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ContractUpload } from "@/components/contract-upload";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/empty-state";
-import { LeaseForm, type LeaseFormValues } from "@/components/forms/lease-form";
+import { LeaseForm, type LeaseFormValues, type LeaseFormExtras } from "@/components/forms/lease-form";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -30,6 +30,7 @@ const STATUS_BADGE: Record<LeaseStatus, "success" | "muted" | "destructive"> = {
 type LeaseWithRelations = Lease & {
   property: { name: string };
   lease_tenants: Array<{ is_primary: boolean; tenant: { id: string; name: string } }>;
+  attachment_count?: number;
 };
 
 export default function LeasesPage() {
@@ -84,7 +85,31 @@ export default function LeasesPage() {
       .eq("household_id", householdId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
-    if (!error) setLeases((data ?? []) as LeaseWithRelations[]);
+    if (error) {
+      setLoading(false);
+      return;
+    }
+    const leasesList = (data ?? []) as LeaseWithRelations[];
+
+    // 同步拉每个 lease 的合同附件数量（单次 query 后前端 group）
+    if (leasesList.length > 0) {
+      const leaseIds = leasesList.map((l) => l.id);
+      const { data: attData } = await supabase
+        .from("attachments")
+        .select("entity_id")
+        .eq("household_id", householdId)
+        .eq("entity_type", "lease")
+        .in("entity_id", leaseIds);
+      const counts = new Map<string, number>();
+      for (const a of (attData ?? []) as Array<{ entity_id: string }>) {
+        counts.set(a.entity_id, (counts.get(a.entity_id) ?? 0) + 1);
+      }
+      for (const lease of leasesList) {
+        lease.attachment_count = counts.get(lease.id) ?? 0;
+      }
+    }
+
+    setLeases(leasesList);
     setLoading(false);
   };
 
@@ -93,7 +118,7 @@ export default function LeasesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId, userLoading]);
 
-  const handleSubmit = async (values: LeaseFormValues) => {
+  const handleSubmit = async (values: LeaseFormValues, extras: LeaseFormExtras) => {
     if (!householdId) return;
 
     const { tenant_id, generate_bills, ...leaseData } = values;
@@ -116,6 +141,35 @@ export default function LeasesPage() {
 
       // 更新房源状态为出租中
       await supabase.from("properties").update({ status: "rented" }).eq("id", values.property_id);
+
+      // 上传合同附件（如有）
+      let contractUploaded = false;
+      if (extras.contractFile) {
+        const file = extras.contractFile;
+        const safeName = file.name.replace(/[^\w.\-一-龥]/g, "_");
+        const objectPath = `${householdId}/${newLease.id}/${Date.now()}-${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from("contracts")
+          .upload(objectPath, file, { upsert: false, contentType: file.type });
+        if (upErr) {
+          toast.warning(`租约已创建，但合同上传失败：${upErr.message}`);
+        } else {
+          const { error: insertErr } = await supabase.from("attachments").insert({
+            household_id: householdId,
+            entity_type: "lease",
+            entity_id: newLease.id,
+            file_name: file.name,
+            file_url: objectPath,
+            file_size: file.size,
+            mime_type: file.type || null,
+          });
+          if (insertErr) {
+            toast.warning(`合同已上传但记录失败：${insertErr.message}`);
+          } else {
+            contractUploaded = true;
+          }
+        }
+      }
 
       // 自动生成账单
       let billsCreated = 0;
@@ -150,11 +204,10 @@ export default function LeasesPage() {
         }
       }
 
-      toast.success(
-        billsCreated > 0
-          ? `租约已创建，自动生成 ${billsCreated} 期账单`
-          : "租约已创建，房源状态已更新为出租中"
-      );
+      const parts = ["租约已创建"];
+      if (billsCreated > 0) parts.push(`生成 ${billsCreated} 期账单`);
+      if (contractUploaded) parts.push("合同已上传");
+      toast.success(parts.join("，"));
     }
 
     setFormOpen(false);
@@ -261,67 +314,92 @@ export default function LeasesPage() {
         />
       ) : (
         <div className="space-y-3">
-          {filtered.map((lease) => (
-            <Card key={lease.id} className="group hover:border-primary/30 transition-colors">
-              <CardContent className="pt-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-semibold text-sm">{lease.property?.name ?? "—"}</span>
-                      <Badge variant={STATUS_BADGE[lease.status]}>
-                        {LEASE_STATUS_LABELS[lease.status]}
-                      </Badge>
+          {filtered.map((lease) => {
+            const attCount = lease.attachment_count ?? 0;
+            return (
+              <Card
+                key={lease.id}
+                className="group hover:border-primary/40 transition-colors cursor-pointer overflow-hidden"
+                onClick={() => openDetail(lease)}
+              >
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-semibold text-sm">{lease.property?.name ?? "—"}</span>
+                        <Badge variant={STATUS_BADGE[lease.status]}>
+                          {LEASE_STATUS_LABELS[lease.status]}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        租客：{getPrimaryTenant(lease)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(lease.start_date)} — {formatDate(lease.end_date)}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      租客：{getPrimaryTenant(lease)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(lease.start_date)} — {formatDate(lease.end_date)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right">
-                      <p className="text-sm font-bold">{formatCurrency(lease.monthly_rent)}<span className="text-xs font-normal text-muted-foreground">/月</span></p>
-                      <p className="text-xs text-muted-foreground">{PAYMENT_CYCLE_LABELS[lease.payment_cycle]} · {BILLING_MODE_LABELS[lease.billing_mode]}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <p className="text-sm font-bold">{formatCurrency(lease.monthly_rent)}<span className="text-xs font-normal text-muted-foreground">/月</span></p>
+                        <p className="text-xs text-muted-foreground">{PAYMENT_CYCLE_LABELS[lease.payment_cycle]} · {BILLING_MODE_LABELS[lease.billing_mode]}</p>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openDetail(lease)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              查看详情
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setEditing(lease); setFormOpen(true); }}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              编辑
+                            </DropdownMenuItem>
+                            {lease.status === "active" && (
+                              <DropdownMenuItem
+                                className="text-orange-600 focus:text-orange-600"
+                                onClick={() => handleTerminate(lease)}
+                              >
+                                <FileText className="mr-2 h-4 w-4" />
+                                归档此租约
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeletingId(lease.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openDetail(lease)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          查看详情
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setEditing(lease); setFormOpen(true); }}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          编辑
-                        </DropdownMenuItem>
-                        {lease.status === "active" && (
-                          <DropdownMenuItem
-                            className="text-orange-600 focus:text-orange-600"
-                            onClick={() => handleTerminate(lease)}
-                          >
-                            <FileText className="mr-2 h-4 w-4" />
-                            归档此租约
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setDeletingId(lease.id)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          删除
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </div>
+                </CardContent>
+                {/* 合同状态条 */}
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-t text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Paperclip className={`h-3.5 w-3.5 ${attCount > 0 ? "text-primary" : "text-muted-foreground"}`} />
+                    {attCount > 0 ? (
+                      <span>
+                        合同 · 已上传 <strong className="text-primary">{attCount}</strong> 份
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">暂无合同附件</span>
+                    )}
+                  </div>
+                  <span className="text-primary text-[11px]">
+                    {attCount > 0 ? "点击查看 →" : "点击上传 →"}
+                  </span>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
