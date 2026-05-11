@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -146,7 +147,10 @@ export default function LoginPage() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          继续即表示您同意我们的服务条款和隐私政策
+          继续即表示您同意我们的
+          <Link href="/terms" className="text-[#C8553D] underline mx-0.5">服务条款</Link>
+          和
+          <Link href="/privacy" className="text-[#C8553D] underline mx-0.5">隐私政策</Link>
         </p>
       </div>
     </div>

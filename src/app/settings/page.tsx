@@ -178,15 +178,34 @@ export default function SettingsPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">关于</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <div className="flex justify-between">
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex justify-between text-muted-foreground">
             <span>版本</span>
             <span>v0.1.0（内测）</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between text-muted-foreground">
             <span>产品定位</span>
             <span>养房 Tend · AI 房东助手</span>
           </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>开发者</span>
+            <span>深圳市一铠科技有限公司</span>
+          </div>
+          <Separator className="my-2" />
+          <Link
+            href="/terms"
+            className="flex items-center justify-between py-1.5 hover:bg-secondary/40 rounded-lg px-2 -mx-2 transition-colors"
+          >
+            <span>用户服务协议</span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+          <Link
+            href="/privacy"
+            className="flex items-center justify-between py-1.5 hover:bg-secondary/40 rounded-lg px-2 -mx-2 transition-colors"
+          >
+            <span>隐私政策</span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
         </CardContent>
       </Card>
 
