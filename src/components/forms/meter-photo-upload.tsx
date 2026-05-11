@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Loader2, Upload, Sparkles, X } from "lucide-react";
+import { Loader2, Sparkles, X, Camera, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type {
@@ -24,15 +24,21 @@ export function MeterPhotoUpload({
   onRecognized,
   disabled = false,
 }: MeterPhotoUploadProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
 
-  const handlePick = () => {
+  const handlePickCamera = () => {
     if (loading || disabled) return;
-    inputRef.current?.click();
+    cameraInputRef.current?.click();
+  };
+
+  const handlePickGallery = () => {
+    if (loading || disabled) return;
+    galleryInputRef.current?.click();
   };
 
   const handleClear = () => {
@@ -42,7 +48,8 @@ export function MeterPhotoUpload({
     });
     setFilename(null);
     setConfidence(null);
-    if (inputRef.current) inputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
   };
 
   const handleFile = async (file: File) => {
@@ -94,7 +101,7 @@ export function MeterPhotoUpload({
   return (
     <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
         type="file"
         accept={ACCEPTED_TYPES}
         capture="environment"
@@ -104,20 +111,45 @@ export function MeterPhotoUpload({
           if (file) handleFile(file);
         }}
       />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept={ACCEPTED_TYPES}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
+      />
 
       {!previewUrl ? (
-        <div className="space-y-1.5">
-          <button
-            type="button"
-            onClick={handlePick}
-            disabled={loading || disabled}
-            className="flex w-full items-center justify-center gap-2 py-2 text-sm font-medium text-primary disabled:opacity-50"
-          >
-            <Sparkles className="h-4 w-4" />
-            拍照识别读数（AI 自动填入）
-          </button>
-          <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-            💡 擦干表盘 · 正对字轮 · 光线充足 · 距离 10-20cm 效果最好
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-primary mb-1">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="font-medium">AI 识别读数</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handlePickCamera}
+              disabled={loading || disabled}
+              className="flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-lg bg-white border border-primary/20 hover:bg-primary/5 hover:border-primary/40 transition-colors disabled:opacity-50"
+            >
+              <Camera className="h-5 w-5 text-primary" />
+              <span className="text-xs font-medium">现场拍照</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePickGallery}
+              disabled={loading || disabled}
+              className="flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-lg bg-white border border-primary/20 hover:bg-primary/5 hover:border-primary/40 transition-colors disabled:opacity-50"
+            >
+              <ImageIcon className="h-5 w-5 text-primary" />
+              <span className="text-xs font-medium">从相册选</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground text-center leading-relaxed pt-0.5">
+            💡 擦干表盘 · 正对字轮 · 光线充足 · 距离 10-20cm
           </p>
         </div>
       ) : (
@@ -143,17 +175,28 @@ export function MeterPhotoUpload({
             ) : (
               <p className="mt-1 text-xs text-muted-foreground">已选择照片</p>
             )}
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex gap-2 flex-wrap">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
-                onClick={handlePick}
+                onClick={handlePickCamera}
                 disabled={loading}
               >
-                <Upload className="mr-1 h-3 w-3" />
-                换一张
+                <Camera className="mr-1 h-3 w-3" />
+                重拍
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={handlePickGallery}
+                disabled={loading}
+              >
+                <ImageIcon className="mr-1 h-3 w-3" />
+                换图
               </Button>
               <Button
                 type="button"
