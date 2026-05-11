@@ -4,16 +4,22 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
-const OUT_DIR = join(ROOT, "软著申请材料");
+const REAL_DIR = "K:\\养房\\软著申请材料";
+const OUT_DIR = process.env.SOFT_COPYRIGHT_DIR
+  || (existsSync(REAL_DIR) ? REAL_DIR : join(ROOT, "软著申请材料"));
 
-// 用户后续可在 软著申请材料/screenshots/ 下放真实截图，命名 01-login.png 等
-// 这里若图存在则嵌入，否则留占位灰框
+// 截图同时支持 .png / .jpg / .jpeg，传入 "01-login.png" 时自动尝试同名其他扩展
 function imgOrPlaceholder(filename, alt, width = 280) {
-  const path = join(OUT_DIR, "screenshots", filename);
-  if (existsSync(path)) {
-    const buf = readFileSync(path);
-    const base64 = buf.toString("base64");
-    return `<img src="data:image/png;base64,${base64}" alt="${alt}" style="max-width:${width}px;border:1px solid #ddd;border-radius:8px;" />`;
+  const basename = filename.replace(/\.[^.]+$/, "");
+  const exts = [".png", ".jpg", ".jpeg"];
+  for (const ext of exts) {
+    const path = join(OUT_DIR, "screenshots", basename + ext);
+    if (existsSync(path)) {
+      const buf = readFileSync(path);
+      const base64 = buf.toString("base64");
+      const mime = ext === ".png" ? "image/png" : "image/jpeg";
+      return `<img src="data:${mime};base64,${base64}" alt="${alt}" style="max-width:${width}px;border:1px solid #ddd;border-radius:8px;" />`;
+    }
   }
   return `<div style="width:${width}px;height:${Math.round(width * 1.7)}px;background:#f4f4f4;border:1px dashed #bbb;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#999;font-size:12px;text-align:center;padding:8px;">[ 此处插入截图：<br/>${alt}<br/>文件名: ${filename} ]</div>`;
 }
@@ -65,7 +71,11 @@ const html = `<!DOCTYPE html>
     <p>软件操作手册</p>
     <p>V1.0</p>
   </div>
-  <div style="margin-top:40mm;font-size:11pt;color:#888;">
+  <div style="margin-top:30mm;font-size:12pt;color:#444;">
+    <p>著作权人：深圳市一铠科技有限公司</p>
+    <p style="font-size:10pt;color:#888;margin-top:2mm;">统一社会信用代码：91440300MADJDXM09R</p>
+  </div>
+  <div style="margin-top:15mm;font-size:11pt;color:#888;">
     <p>${new Date().getFullYear()} 年 ${new Date().getMonth() + 1} 月</p>
   </div>
 </div>

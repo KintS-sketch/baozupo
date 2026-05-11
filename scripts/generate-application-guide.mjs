@@ -1,9 +1,11 @@
-import { writeFileSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = join(__dirname, "..", "软著申请材料");
+const REAL_DIR = "K:\\养房\\软著申请材料";
+const OUT_DIR = process.env.SOFT_COPYRIGHT_DIR
+  || (existsSync(REAL_DIR) ? REAL_DIR : join(__dirname, "..", "软著申请材料"));
 
 const html = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -34,7 +36,7 @@ const html = `<!DOCTYPE html>
 <body>
 
 <h1>养房 Tend 软著申请傻瓜式指南</h1>
-<p>跟着每一步操作，30 个工作日后下证。</p>
+<p>跟着每一步操作，30 个工作日后下证。著作权人为 <strong>深圳市一铠科技有限公司</strong>。</p>
 
 <div class="warn">
 <strong>⚠ 阅读顺序：</strong>本文档分 <code>第 1 步</code> 到 <code>第 7 步</code>，请按顺序操作。每完成一步在前面的方框里打勾。
@@ -42,7 +44,9 @@ const html = `<!DOCTYPE html>
 
 <h2>📦 申请材料清单（你已有/我已生成）</h2>
 <ul>
-  <li><span class="checkbox"></span> <strong>身份证正反面扫描件</strong>（你自己扫描或拍照，要清晰）</li>
+  <li><span class="checkbox"></span> <strong>营业执照副本扫描件</strong>（彩色扫描或拍照，要清晰，所有字段可读）</li>
+  <li><span class="checkbox"></span> <strong>公司公章 PDF / 扫描件</strong>（盖在白纸上拍清晰）</li>
+  <li><span class="checkbox"></span> <strong>法人身份证正反面扫描件</strong>（部分流程会要求，备用）</li>
   <li><span class="checkbox"></span> <strong>源代码 - 前 30 页</strong>（已生成：<code>源代码-前30页.html</code>，需打印为 PDF）</li>
   <li><span class="checkbox"></span> <strong>源代码 - 后 30 页</strong>（已生成：<code>源代码-后30页.html</code>，需打印为 PDF）</li>
   <li><span class="checkbox"></span> <strong>软件操作手册</strong>（已生成：<code>软件操作手册-V1.0.html</code>，需打印为 PDF）</li>
@@ -50,8 +54,8 @@ const html = `<!DOCTYPE html>
 </ul>
 
 <div class="ok">
-<strong>✓ 我帮你做好的：</strong>所有源代码、操作手册、字段建议值。<br/>
-<strong>● 需要你做的：</strong>截图、打印 PDF、注册账号、提交申请、付款（如要加急）。
+<strong>✓ 我帮你做好的：</strong>所有源代码、操作手册、字段建议值（已按公司主体填）。<br/>
+<strong>● 需要你做的：</strong>截图、打印 PDF、注册单位账号、上传公司材料、提交申请、付款（如要加急）。
 </div>
 
 <h2>🖼 第 1 步：截图（30 分钟）</h2>
@@ -86,18 +90,35 @@ const html = `<!DOCTYPE html>
   <li>同样方式处理 <code>源代码-后30页.html</code> → <code>源代码-后30页.pdf</code></li>
 </ol>
 
-<h2>🌐 第 3 步：注册中国版权保护中心账号（5 分钟）</h2>
+<h2>🌐 第 3 步：注册中国版权保护中心账号（10 分钟）</h2>
 <div class="step">
 <strong>访问网址：</strong><code>https://register.ccopyright.com.cn/registerIndex.html</code>
 </div>
 <ol>
   <li>点首页右上角"<strong>注册</strong>"</li>
-  <li>选择"<strong>个人</strong>"用户类型</li>
-  <li>填写邮箱、手机、密码（密码记下来，下证后还要登录查询）</li>
+  <li>选择"<strong>单位用户</strong>"（不要选"自然人用户"，否则著作权人会变成个人）</li>
+  <li>填写公司邮箱、法人或经办人手机、密码（密码记下来，下证后还要登录查询）</li>
   <li>邮箱验证 + 手机验证</li>
-  <li>登录后进入个人中心，<strong>上传身份证正反面</strong>做实名认证</li>
-  <li>等待 1-3 个工作日认证通过</li>
+  <li>登录后进入单位中心，提交<strong>单位实名认证</strong>，上传：
+    <ul>
+      <li><strong>营业执照副本彩色扫描件</strong>（PDF 或图片，清晰可读）</li>
+      <li><strong>经办人身份证正反面</strong>（一般填法人）</li>
+      <li><strong>授权委托书</strong>（如果经办人不是法人，需要法人手写签名 + 加盖公章；如经办人就是法人，可跳过）</li>
+    </ul>
+  </li>
+  <li>填写单位基本信息：
+    <div class="field"><div class="field-name">单位名称</div><div class="field-value">深圳市一铠科技有限公司</div></div>
+    <div class="field"><div class="field-name">统一社会信用代码</div><div class="field-value">91440300MADJDXM09R</div></div>
+    <div class="field"><div class="field-name">单位性质</div><div class="field-value">有限责任公司</div></div>
+    <div class="field"><div class="field-name">注册地址</div><div class="field-value">营业执照上的地址原文</div></div>
+    <div class="field"><div class="field-name">法定代表人</div><div class="field-value">营业执照上的法人姓名</div></div>
+  </li>
+  <li>等待 <strong>3-5 个工作日</strong>单位认证通过（单位比个人慢一些）</li>
 </ol>
+
+<div class="warn">
+<strong>💡 小贴士：</strong>单位账号一次申请通过后，未来公司的所有软件软著都用这个账号，不用重新申请。多版本 (V2.0/V3.0) 都在这下面继续递交。
+</div>
 
 <h2>📝 第 4 步：在线填写软著申请表（30 分钟）</h2>
 <p>认证通过后，进入"<strong>计算机软件著作权登记</strong>"模块，新建申请。每一项填这个：</p>
@@ -112,19 +133,28 @@ const html = `<!DOCTYPE html>
 <div class="field"><div class="field-name">权利取得方式</div><div class="field-value">原始取得</div></div>
 <div class="field"><div class="field-name">权利范围</div><div class="field-value">全部权利</div></div>
 
-<h3>4.2 著作权人信息</h3>
-<div class="field"><div class="field-name">著作权人姓名</div><div class="field-value">你身份证上的姓名</div></div>
-<div class="field"><div class="field-name">证件类型/号码</div><div class="field-value">身份证 + 18 位号码</div></div>
-<div class="field"><div class="field-name">联系电话</div><div class="field-value">你常用手机</div></div>
-<div class="field"><div class="field-name">邮箱</div><div class="field-value">注册账号用的邮箱</div></div>
-<div class="field"><div class="field-name">通讯地址</div><div class="field-value">身份证地址或常住地址</div></div>
+<h3>4.2 著作权人信息（单位）</h3>
+<div class="field"><div class="field-name">著作权人类型</div><div class="field-value">法人或其他组织</div></div>
+<div class="field"><div class="field-name">单位名称（全称）</div><div class="field-value">深圳市一铠科技有限公司</div></div>
+<div class="field"><div class="field-name">证件类型</div><div class="field-value">统一社会信用代码证</div></div>
+<div class="field"><div class="field-name">证件号码</div><div class="field-value">91440300MADJDXM09R</div></div>
+<div class="field"><div class="field-name">单位性质</div><div class="field-value">有限责任公司</div></div>
+<div class="field"><div class="field-name">所属行业</div><div class="field-value">信息传输、软件和信息技术服务业</div></div>
+<div class="field"><div class="field-name">法定代表人</div><div class="field-value">营业执照上的法人姓名</div></div>
+<div class="field"><div class="field-name">联系电话</div><div class="field-value">法人或经办人手机</div></div>
+<div class="field"><div class="field-name">邮箱</div><div class="field-value">注册账号用的公司邮箱</div></div>
+<div class="field"><div class="field-name">通讯地址</div><div class="field-value">营业执照注册地址原文</div></div>
+<div class="field"><div class="field-name">邮政编码</div><div class="field-value">注册地址对应邮编（深圳 518000 起，按区填）</div></div>
 
-<h3>4.3 软件功能描述（让我直接写好你抄）</h3>
+<h3>4.3 开发者信息</h3>
+<p>"开发者"指实际写代码的主体。本项目由公司自有团队开发，所以著作权人 = 开发者，<strong>勾选"著作权人即开发者"</strong>即可，不用重复填。</p>
+
+<h3>4.4 软件功能描述（让我直接写好你抄）</h3>
 <div class="step">
-养房 Tend 是一款面向中国大陆个人房东的轻量化租赁管理软件，采用渐进式 Web 应用（PWA）技术开发。核心功能包括：房源信息管理、租客信息管理、租约创建与归档、自动账单生成与状态追踪、收款记录、AI 自动识别微信/支付宝/银行转账截图、水电气抄表、智能提醒、合同附件管理、家庭组多人协作。软件采用前后端分离架构，前端基于 Next.js 与 React，后端基于 PostgreSQL 数据库与行级安全策略，AI 功能由 Anthropic Claude 多模态模型提供。
+养房 Tend 是深圳市一铠科技有限公司自主研发的一款面向中国大陆个人房东的轻量化租赁管理软件，采用渐进式 Web 应用（PWA）技术开发。核心功能包括：房源信息管理、租客信息管理、租约创建与归档、自动账单生成与状态追踪、收款记录、AI 自动识别微信/支付宝/银行转账截图、水电气抄表、智能提醒、合同附件管理、家庭组多人协作。软件采用前后端分离架构，前端基于 Next.js 与 React，后端基于 PostgreSQL 数据库与行级安全策略，AI 功能由多模态视觉理解大模型提供，支持移动端 / 桌面端多终端访问。
 </div>
 
-<h3>4.4 技术信息</h3>
+<h3>4.5 技术信息</h3>
 <div class="field"><div class="field-name">编程语言</div><div class="field-value">TypeScript（基于 JavaScript）</div></div>
 <div class="field"><div class="field-name">硬件平台</div><div class="field-value">智能手机 + 个人电脑</div></div>
 <div class="field"><div class="field-name">操作系统</div><div class="field-value">Android、iOS、Windows、macOS</div></div>
@@ -135,9 +165,14 @@ const html = `<!DOCTYPE html>
 <table>
   <tr><th>系统要求</th><th>对应你的文件</th></tr>
   <tr><td>源程序（前 30 + 后 30 页）</td><td><code>源代码-前30页.pdf</code> + <code>源代码-后30页.pdf</code>（合并为一份或分别上传）</td></tr>
-  <tr><td>软件文档</td><td><code>软件操作手册-V1.0.pdf</code></td></tr>
-  <tr><td>身份证扫描件</td><td>正反面 PDF（自己拼接或分别上传）</td></tr>
+  <tr><td>软件文档（操作手册）</td><td><code>软件操作手册-V1.0.pdf</code></td></tr>
+  <tr><td>主体证明文件</td><td><strong>营业执照副本彩色扫描件</strong>（PDF）</td></tr>
+  <tr><td>授权委托书（如适用）</td><td>经办人非法人时需要：法人手写签名 + 公司公章扫描件</td></tr>
 </table>
+
+<div class="warn">
+<strong>📌 公司主体特有要求：</strong>所有上传的 PDF / 图片 <strong>必须在右下角加盖公司公章</strong>（电子盖章或纸质盖章后扫描都行）。如果你不会做电子盖章，告诉我，我用 Python 帮你把公章 PNG 自动盖到 PDF 右下角。
+</div>
 
 <h2>💰 第 6 步：缴费 / 加急选择</h2>
 <table>
@@ -152,8 +187,8 @@ const html = `<!DOCTYPE html>
 <ul>
   <li>提交后 1-2 周内系统会发邮件 / 短信告知"<strong>受理通知书</strong>"已下，可以在个人中心下载</li>
   <li>之后进入实质审查阶段，期间可能会让你<strong>补正材料</strong>（比如要求换截图、要求改某个字段）— 收到补正通知 30 天内必须回复</li>
-  <li>审查通过后系统会通知你"<strong>登记证书</strong>"已下，**电子证书**可在线下载，**纸质证书**邮寄到你身份证地址（或自己去窗口取）</li>
-  <li>下证后 → 你就有正式的"<strong>计算机软件著作权登记证书</strong>" → 可以拿去华为、应用宝等需要软著的应用市场上架了</li>
+  <li>审查通过后系统会通知你"<strong>登记证书</strong>"已下，**电子证书**可在线下载，**纸质证书**邮寄到<strong>公司注册地址</strong>（或自己去窗口取）</li>
+  <li>下证后 → 公司就持有正式的"<strong>计算机软件著作权登记证书</strong>" → 可以拿去华为、应用宝等需要软著的应用市场上架了，未来融资 / 估值时也是公司无形资产</li>
 </ul>
 
 <div class="ok">
@@ -172,7 +207,26 @@ const html = `<!DOCTYPE html>
 <p>"养房 Tend" 这个名字 = 中文 + 英文混合，按规则要看版权中心是否接受。如果他们要求纯中文，备用名建议：<strong>养房助手</strong>、<strong>房东 Tend</strong>。等他们让补正再说，先按 "养房 Tend" 提交。</p>
 
 <h3>Q：要找代理公司吗？</h3>
-<p>个人完全能办。代理公司收 ¥300-800 帮你填表 + 跟进，但你看了这份指南其实自己 30 分钟就能搞定。</p>
+<p>公司自己完全能办。代理公司收 ¥500-1500 帮你填表 + 跟进，但你看了这份指南其实经办人 30 分钟就能搞定。如果走加急通道（¥3000+），代理可能更熟悉流程。</p>
+
+<h3>Q：以公司名义申请有什么好处？</h3>
+<ul>
+  <li><strong>风险隔离</strong>：未来软件如有用户纠纷、知识产权诉讼，由公司承担，不波及法人个人财产</li>
+  <li><strong>无形资产</strong>：软著证书可作为公司无形资产入账，融资 / 估值 / 高新技术企业认定都用得上</li>
+  <li><strong>应用市场</strong>：华为 / 应用宝等市场上架要求"软著主体 = 开发者账号主体"，公司一致更顺</li>
+  <li><strong>多版本统一</strong>：未来 V2.0、V3.0、V4.0 都在同一公司账号下，集中管理</li>
+</ul>
+
+<h3>Q：公司公章怎么电子化盖到 PDF 上？</h3>
+<p>三种方法（按推荐顺序）：</p>
+<ol>
+  <li><strong>WPS / Microsoft Word</strong>：插入 → 图片 → 选公章 PNG → 设置文字环绕"浮于文字上方" → 拖到右下角 → 另存为 PDF</li>
+  <li><strong>Adobe Acrobat</strong>：工具 → 标记和注释 → 添加图章 → 自定义图章 → 导入公章 PNG</li>
+  <li>告诉我"帮我盖章"，我用 Python 自动批量盖章到所有 PDF 右下角</li>
+</ol>
+
+<h3>Q：申请费用全公司账户出吗？</h3>
+<p>建议是。普通办理免费；加急走对公支付（开发票方便）。如个人代付要走"借款 / 报销"流程，麻烦。</p>
 
 <p style="text-align:center;color:#888;margin-top:20mm;">— 完 —</p>
 
