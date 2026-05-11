@@ -15,16 +15,17 @@ export const maxDuration = 60;
 /**
  * GET /api/cron/reminders
  *
- * Vercel Cron 每天调一次，扫描所有已绑定微信的用户，按规则推送：
- *   1. 账单到期：今天到期 / 已逾期 1-7 天
- *   2. 抄表提醒：上次抄表 ≥ 28 天前，或从未抄过
- *   3. 租约到期：还有 30 / 7 / 0 天
+ * Vercel Cron 每天 UTC 0:00（北京 08:00）扫描所有已绑定微信的用户。
  *
- * 安全：Vercel Cron 调用时会带 Authorization: Bearer ${CRON_SECRET}，
- *      用 CRON_SECRET 验证身份，避免被公网随便触发。
+ * 推送规则（克制版 - 避免骚扰）：
+ *   账单到期 → D-1（提前 1 天）+ D=0（当天）+ D+3（逾期 3 天）
+ *   租约到期 → D-14（提前半月）+ D-1（提前 1 天）
+ *   抄表提醒 → 上次抄表 ≥ 28 天前或从未抄过，每月每表一次
  *
- * 去重：每次推送写一条 wechat_push_logs 记录，
- *      下次扫描时按 (user_id, template_key, related_id) 跳过已推送的实体。
+ * 安全：Vercel Cron 调用时会带 Authorization: Bearer ${CRON_SECRET}。
+ *
+ * 去重：通过 wechat_push_logs.error_msg 字段编码 dedup_key 实现
+ *      （例如 bill-{id}-d1before，每个 stage 推一次）。
  */
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://baozupo.vercel.app";
@@ -128,6 +129,16 @@ interface BillRow {
   leases: { lease_tenants: Array<{ is_primary: boolean; tenant: { name: string } | null }> } | null;
 }
 
+// 三个触发点：D-1（明天到期）/ D=0（今天到期）/ D+3（逾期 3 天）
+// daysOverdue 视角：D-1 = -1，D=0 = 0，D+3 = +3
+const BILL_OFFSETS = [-1, 0, 3] as const;
+
+function stageLabel(daysOverdue: number): string {
+  if (daysOverdue < 0) return `d${-daysOverdue}before`;
+  if (daysOverdue === 0) return "d0";
+  return `d${daysOverdue}after`;
+}
+
 async function pushBillReminders(
   admin: Admin,
   userId: string,
@@ -137,8 +148,13 @@ async function pushBillReminders(
 ) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
+
+  // due_date 与今天的偏移：daysOverdue = -1 时 due_date = today+1 (明天)
+  const targetDates = BILL_OFFSETS.map((daysOverdue) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - daysOverdue);
+    return d.toISOString().slice(0, 10);
+  });
 
   const { data } = await admin
     .from("bills")
@@ -147,16 +163,16 @@ async function pushBillReminders(
     )
     .in("household_id", householdIds)
     .in("status", ["pending", "partial", "overdue"])
-    .gte("due_date", sevenDaysAgo.toISOString().slice(0, 10))
-    .lte("due_date", today.toISOString().slice(0, 10));
+    .in("due_date", targetDates);
 
   const bills = (data ?? []) as unknown as BillRow[];
 
   for (const bill of bills) {
-    if (await hasBeenPushed(admin, userId, "bill_due", bill.id)) continue;
-
     const dueDate = new Date(bill.due_date);
     const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (24 * 3600 * 1000));
+    const dedupKey = `bill-${bill.id}-${stageLabel(daysOverdue)}`;
+
+    if (await hasBeenPushedByKey(admin, userId, "bill_due", dedupKey)) continue;
 
     const propertyName = bill.property?.name ?? "—";
     const primaryTenant =
@@ -173,7 +189,7 @@ async function pushBillReminders(
       baseUrl: BASE_URL,
     });
 
-    await logPush(admin, userId, openid, "bill_due", "bill", bill.id, result);
+    await logPushByKey(admin, userId, openid, "bill_due", dedupKey, result);
     if (result.success) summary.bills_pushed++;
   }
 }
@@ -189,6 +205,9 @@ interface LeaseRow {
   lease_tenants: Array<{ is_primary: boolean; tenant: { name: string } | null }>;
 }
 
+// 两个触发点：D-14（提前半月）+ D-1（提前 1 天）
+const LEASE_OFFSETS = [14, 1] as const;
+
 async function pushLeaseReminders(
   admin: Admin,
   userId: string,
@@ -199,7 +218,7 @@ async function pushLeaseReminders(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const targetDates = [0, 7, 30].map((offset) => {
+  const targetDates = LEASE_OFFSETS.map((offset) => {
     const d = new Date(today);
     d.setDate(today.getDate() + offset);
     return d.toISOString().slice(0, 10);
@@ -217,10 +236,12 @@ async function pushLeaseReminders(
   const leases = (data ?? []) as unknown as LeaseRow[];
 
   for (const lease of leases) {
-    if (await hasBeenPushed(admin, userId, "lease_expiry", lease.id)) continue;
-
     const endDate = new Date(lease.end_date);
     const daysLeft = Math.floor((endDate.getTime() - today.getTime()) / (24 * 3600 * 1000));
+    const dedupKey = `lease-${lease.id}-d${daysLeft}before`;
+
+    if (await hasBeenPushedByKey(admin, userId, "lease_expiry", dedupKey)) continue;
+
     const propertyName = lease.property?.name ?? "—";
     const tenantName =
       lease.lease_tenants?.find((lt) => lt.is_primary)?.tenant?.name ?? "租客";
@@ -235,7 +256,7 @@ async function pushLeaseReminders(
       baseUrl: BASE_URL,
     });
 
-    await logPush(admin, userId, openid, "lease_expiry", "lease", lease.id, result);
+    await logPushByKey(admin, userId, openid, "lease_expiry", dedupKey, result);
     if (result.success) summary.leases_pushed++;
   }
 }
@@ -323,23 +344,10 @@ async function pushMeterReminders(
 // ============================================================
 // 去重 / 日志 helper
 // ============================================================
-
-async function hasBeenPushed(
-  admin: Admin,
-  userId: string,
-  templateKey: string,
-  relatedId: string
-): Promise<boolean> {
-  const { data } = await admin
-    .from("wechat_push_logs")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("template_key", templateKey)
-    .eq("related_id", relatedId)
-    .eq("status", "success")
-    .maybeSingle();
-  return !!data;
-}
+// 统一用 dedup_key 编码到 error_msg 字段（避免改表结构）
+//   bill-{billId}-{d1before|d0|d3after}
+//   lease-{leaseId}-d{N}before
+//   meter-{propertyId}-{type}-{yyyy-mm}
 
 async function hasBeenPushedByKey(
   admin: Admin,
@@ -356,26 +364,6 @@ async function hasBeenPushedByKey(
     .eq("status", "success")
     .maybeSingle();
   return !!data;
-}
-
-async function logPush(
-  admin: Admin,
-  userId: string,
-  openid: string,
-  templateKey: string,
-  relatedType: string,
-  relatedId: string,
-  result: { success: boolean; error?: string }
-) {
-  await admin.from("wechat_push_logs").insert({
-    user_id: userId,
-    openid,
-    template_key: templateKey,
-    related_type: relatedType,
-    related_id: relatedId,
-    status: result.success ? "success" : "failed",
-    error_msg: result.error ?? null,
-  });
 }
 
 async function logPushByKey(

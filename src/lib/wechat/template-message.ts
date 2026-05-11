@@ -94,19 +94,20 @@ export async function sendBillDueReminder(opts: {
   billId: string;
   baseUrl: string;       // 例如 https://baozupo.vercel.app
 }): Promise<SendTemplateResult> {
-  const remark =
-    opts.daysOverdue > 0
-      ? `已逾期 ${opts.daysOverdue} 天，建议及时联系租客`
-      : opts.daysOverdue === 0
-        ? "今天就是收租日，记得查收哦"
-        : `还有 ${-opts.daysOverdue} 天到期，可以提前打个招呼`;
-
+  // 三档：D-1（提前 1 天）/ D=0（今天）/ D+3（逾期 3 天）
   const first =
-    opts.daysOverdue > 0
-      ? "🌧 有一笔租金已经逾期啦"
+    opts.daysOverdue >= 1
+      ? `🌧 已逾期 ${opts.daysOverdue} 天`
       : opts.daysOverdue === 0
         ? "🌱 今日收租日"
-        : "🌿 收租日临近";
+        : "🌿 明天收租日";
+
+  const remark =
+    opts.daysOverdue >= 1
+      ? `已逾期 ${opts.daysOverdue} 天，建议尽快联系租客`
+      : opts.daysOverdue === 0
+        ? "今天就是收租日，记得查收哦"
+        : "明天到期，可以提前打个招呼";
 
   return sendTemplateMessage({
     templateKey: "bill_due",
@@ -181,19 +182,23 @@ export async function sendLeaseExpiryReminder(opts: {
   leaseId: string;
   baseUrl: string;
 }): Promise<SendTemplateResult> {
+  // 两档：D-14（提前半月）/ D-1（提前 1 天）
+  const first =
+    opts.daysLeft <= 1
+      ? "🌾 明天合同到期"
+      : `🌾 租约还有 ${opts.daysLeft} 天到期`;
+
   const remark =
-    opts.daysLeft <= 0
-      ? "合同已到期，建议尽快联系租客确认续约 / 退租"
-      : opts.daysLeft <= 7
-        ? "建议本周内主动联系租客，确认续租意向"
-        : "可以提前打个招呼，沟通续约条件";
+    opts.daysLeft <= 1
+      ? "建议今天就确认续约 / 退租安排"
+      : "可以开始沟通续约 / 退租意向，留出充足时间";
 
   return sendTemplateMessage({
     templateKey: "lease_expiry",
     openid: opts.openid,
     url: `${opts.baseUrl}/leases?highlight=${opts.leaseId}`,
     data: {
-      first:     { value: "🌾 租约即将到期", color: BRAND_COLOR },
+      first:     { value: first, color: BRAND_COLOR },
       property:  { value: opts.propertyName },
       tenant:    { value: opts.tenantName },
       end_date:  { value: opts.endDate },
