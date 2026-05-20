@@ -47,7 +47,22 @@ export default function LoginPage() {
           options: { emailRedirectTo: `${location.origin}/api/auth/callback` },
         });
         if (error) throw error;
-        toast.success("注册成功！请检查邮箱完成验证");
+
+        // 注册成功后立刻尝试登录：
+        // - 如果 Supabase 未开启邮箱确认（默认行为），直接登录成功 → 跳主页
+        // - 如果开启了邮箱确认，登录会失败 → 提示用户去邮箱确认，切回登录模式
+        const { error: autoLoginError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (!autoLoginError) {
+          toast.success("注册成功，正在进入...");
+          router.push("/");
+          router.refresh();
+        } else {
+          toast.success("注册成功！请到邮箱完成验证，然后回到这里登录");
+          setMode("login");
+        }
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "操作失败";
