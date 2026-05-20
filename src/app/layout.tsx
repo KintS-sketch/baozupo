@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "养房 Tend · AI 房东助手",
-  description: "让管理几套房，像养一盆花一样轻松",
+  description: "拍一下就出账单，到期主动提醒",
   manifest: "/manifest.json",
   applicationName: "养房 Tend",
   appleWebApp: {

@@ -396,7 +396,7 @@ export default function DashboardPage() {
 
       {/* 底部温馨结尾 */}
       <p className="text-center text-xs text-muted-faint pt-2 pb-2">
-        像养一盆花一样，慢慢经营你的房子 🌿
+        慢慢经营，每一套房都有故事
       </p>
     </div>
   );
