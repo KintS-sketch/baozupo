@@ -35,6 +35,9 @@ const navItems = [
   { href: "/household", label: "家庭组", icon: UsersRound },
 ];
 
+// 这些路径下不显示侧边栏（未登录或认证相关）
+const HIDE_SIDEBAR_PREFIXES = ["/login", "/api/auth"];
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -44,6 +47,10 @@ export function Sidebar() {
     await supabase.auth.signOut();
     router.push("/login");
   };
+
+  if (HIDE_SIDEBAR_PREFIXES.some((p) => pathname.startsWith(p))) {
+    return null;
+  }
 
   return (
     <aside className="hidden md:flex flex-col w-56 min-h-screen bg-white border-r border-border">

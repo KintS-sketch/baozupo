@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, LogIn, UserPlus, CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -91,19 +92,50 @@ export default function LoginPage() {
             <h1 className="text-3xl font-bold text-foreground tracking-tight">养房</h1>
             <span className="text-sm text-muted-faint tracking-widest font-medium">TEND</span>
           </div>
-          <p className="text-sm text-muted-foreground mt-1.5">让管理几套房，像养一盆花一样轻松</p>
+          <p className="text-sm text-muted-foreground mt-1.5">拍一下就出账单，到期主动提醒</p>
         </div>
 
-        <Card>
+        <Card className={cn(
+          "transition-all duration-300",
+          mode === "register" && "ring-2 ring-primary/20 shadow-soft-md"
+        )}>
           <CardHeader className="pb-4">
-            <CardTitle>{mode === "login" ? "登录账号" : "创建账号"}</CardTitle>
-            <CardDescription>
-              {mode === "login"
-                ? "使用邮箱和密码登录您的账号"
-                : "注册后即可开始管理您的房源"}
-            </CardDescription>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                mode === "login"
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-primary text-white"
+              )}>
+                {mode === "login" ? <LogIn className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
+              </div>
+              <div className="flex-1">
+                <CardTitle>{mode === "login" ? "欢迎回来" : "开始使用养房 Tend"}</CardTitle>
+                <CardDescription className="mt-0.5">
+                  {mode === "login"
+                    ? "用邮箱密码登录"
+                    : "1 分钟创建账号，免费使用"}
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
+            {mode === "register" && (
+              <div className="bg-primary/5 rounded-lg p-3 mb-4 space-y-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <span>拍水电表自动识别读数</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <span>账单自动生成 + 微信主动提醒</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <span>租约 / 房源 / 账单 一站管理</span>
+                </div>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">邮箱</Label>
