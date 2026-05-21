@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  MapPin,
   Edit,
   Loader2,
   FileText,
@@ -19,6 +18,14 @@ import {
   ExternalLink,
   Trash2,
 } from "lucide-react";
+
+/** 字段为空（null/undefined/空串/"null"/"NULL"）时显示"未填写" */
+function safeText(v: string | number | null | undefined): string {
+  if (v === null || v === undefined) return "未填写";
+  const s = String(v).trim();
+  if (!s || s.toLowerCase() === "null") return "未填写";
+  return s;
+}
 import {
   AlertDialog,
   AlertDialogAction,
@@ -291,10 +298,7 @@ export default function PropertyDetailPage({
                 {PROPERTY_STATUS_LABELS[property.status]}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-              <MapPin className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{property.address}</span>
-            </p>
+            {/* 地址已搬到下方"基本信息"卡片，避免表头重复 */}
           </div>
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Edit className="h-4 w-4 mr-1" />
@@ -303,33 +307,32 @@ export default function PropertyDetailPage({
         </div>
       </div>
 
-      {/* 基本信息 */}
+      {/* 基本信息 — 所有字段无条件显示，未填写显示"未填写" */}
       <Card>
-        <CardContent className="pt-4 grid grid-cols-2 gap-y-2 text-sm">
-          {property.district && (
-            <>
-              <span className="text-muted-foreground">省</span>
-              <span>{property.district}</span>
-            </>
-          )}
-          {property.city && (
-            <>
-              <span className="text-muted-foreground">城市</span>
-              <span>{property.city}</span>
-            </>
-          )}
-          {property.layout && (
-            <>
-              <span className="text-muted-foreground">户型</span>
-              <span>{property.layout}</span>
-            </>
-          )}
-          {property.area && (
-            <>
-              <span className="text-muted-foreground">面积</span>
-              <span>{property.area} ㎡</span>
-            </>
-          )}
+        <CardContent className="pt-4 grid grid-cols-[5rem_1fr] gap-y-2 text-sm">
+          <span className="text-muted-foreground">地址</span>
+          <span>{safeText(property.address)}</span>
+
+          <span className="text-muted-foreground">省</span>
+          <span className={safeText(property.district) === "未填写" ? "text-muted-foreground" : ""}>
+            {safeText(property.district)}
+          </span>
+
+          <span className="text-muted-foreground">城市</span>
+          <span className={safeText(property.city) === "未填写" ? "text-muted-foreground" : ""}>
+            {safeText(property.city)}
+          </span>
+
+          <span className="text-muted-foreground">户型</span>
+          <span className={safeText(property.layout) === "未填写" ? "text-muted-foreground" : ""}>
+            {safeText(property.layout)}
+          </span>
+
+          <span className="text-muted-foreground">面积</span>
+          <span className={safeText(property.area) === "未填写" ? "text-muted-foreground" : ""}>
+            {safeText(property.area) === "未填写" ? "未填写" : `${property.area} ㎡`}
+          </span>
+
           {property.notes && (
             <>
               <span className="text-muted-foreground col-span-2 mt-2">备注</span>
