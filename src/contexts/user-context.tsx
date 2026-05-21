@@ -27,6 +27,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  // remountKey：切回前台时 +1，作为子树 React key 强制所有 client 子页面
+  // remount + 重新跑 useEffect（应对浏览器 freeze tab 导致 pending fetch
+  // 永远不 resolve、子页面卡转圈圈的问题）
+  const [remountKey, setRemountKey] = useState(0);
   const router = useRouter();
   const initRef = useRef(false);
   // 单飞锁：防止 getSession + onAuthStateChange("SIGNED_IN") 并发调用 ensureHousehold
@@ -170,10 +174,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     });
 
     // 切回前台时的恢复策略（应对手机浏览器后台 freeze tab 导致页面卡死）
-    // 三层防御：
-    // 1. 强制释放 loading 状态（如果还卡着）
+    // 四层防御：
+    // 1. 强制释放 UserContext loading 状态（如果还卡着）
     // 2. 重新 getSession（自动 refresh expired token）
-    // 3. router.refresh() 触发 server components 重新 fetch 数据
+    // 3. router.refresh() 触发 server components 重新 fetch
+    // 4. remountKey +1 强制所有 client 子页面 unmount + remount，
+    //    丢弃 freeze 中残留的 pending fetch，重新跑 useEffect 拉数据
     // 用 30 秒限频避免频繁 alt-tab 拖慢应用
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
@@ -192,6 +198,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       // 3. 触发 Next.js Server Components 重新 fetch
       router.refresh();
+
+      // 4. 强制 client 子页面 remount，避免 fetch 被 freeze 卡住转圈不刷
+      setRemountKey((k) => k + 1);
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
 
@@ -205,7 +214,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <UserContext.Provider value={{ user, householdId, subscription, loading, refreshSubscription }}>
-      {children}
+      {/*
+        用 remountKey 作为 React key 包裹 children——切回前台时 key 变化，
+        所有 client 子页面整棵子树 unmount + remount，所有 useEffect 重新跑，
+        丢弃 freeze 中残留的 pending fetch。
+        UserContext value 不受影响（user/householdId 不会重置）。
+      */}
+      <React.Fragment key={remountKey}>{children}</React.Fragment>
     </UserContext.Provider>
   );
 }
