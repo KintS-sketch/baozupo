@@ -27,6 +27,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const initRef = useRef(false);
+  // 单飞锁：防止 getSession + onAuthStateChange("SIGNED_IN") 并发调用 ensureHousehold
+  // 之前没锁导致每次刷新都新建 household，user 累积 30+ 个"我的家庭组"
+  // 关联 bug 修复 commit 见 git blame
+  const ensuringRef = useRef<Promise<void> | null>(null);
 
   const fetchSubscription = async (userId: string) => {
     const supabase = createClient();
@@ -51,34 +55,68 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
 
     const ensureHousehold = async (userId: string) => {
-      const { data: membership } = await supabase
-        .from("household_members")
-        .select("household_id")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (membership) {
-        setHouseholdId(membership.household_id);
+      // 单飞锁：已有 in-flight 就复用，不并发跑两次
+      if (ensuringRef.current) {
+        await ensuringRef.current;
         return;
       }
+      ensuringRef.current = (async () => {
+        // 用 limit(1) + order，避免 maybeSingle 在多行时报错触发误判
+        // 之前 bug：maybeSingle 多行时返回 error 但代码只取了 data 字段
+        // → membership 为 null → 又 insert → 越积越多
+        // 取最早的那条作为权威 household（数据迁移脚本同样规则）
+        const { data: members, error: memberErr } = await supabase
+          .from("household_members")
+          .select("household_id, created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true })
+          .limit(1);
 
-      const { data: household, error } = await supabase
-        .from("households")
-        .insert({ name: "我的家庭组", owner_id: userId })
-        .select("id")
-        .single();
+        if (memberErr) {
+          console.error("[UserCtx] household_members query error:", memberErr);
+          // 查询失败时绝不 insert，避免脏数据
+          return;
+        }
 
-      if (error || !household) {
-        if (error) console.error("[UserCtx] household insert error:", error);
-        return;
+        if (members && members.length > 0) {
+          setHouseholdId(members[0].household_id);
+          return;
+        }
+
+        // 真的没有 → insert（应用层 + DB unique(owner_id) 双重防护）
+        const { data: household, error } = await supabase
+          .from("households")
+          .insert({ name: "我的家庭组", owner_id: userId })
+          .select("id")
+          .single();
+
+        if (error || !household) {
+          if (error) {
+            console.error("[UserCtx] household insert error:", error);
+            // 可能 DB unique 冲突 → 再查现有的
+            const { data: retry } = await supabase
+              .from("households")
+              .select("id")
+              .eq("owner_id", userId)
+              .order("created_at", { ascending: true })
+              .limit(1);
+            if (retry && retry[0]) setHouseholdId(retry[0].id);
+          }
+          return;
+        }
+
+        const { error: memberInsertErr } = await supabase
+          .from("household_members")
+          .insert({ household_id: household.id, user_id: userId, role: "owner" });
+
+        if (memberInsertErr) console.error("[UserCtx] member insert error:", memberInsertErr);
+        setHouseholdId(household.id);
+      })();
+      try {
+        await ensuringRef.current;
+      } finally {
+        ensuringRef.current = null;
       }
-
-      const { error: memberInsertErr } = await supabase
-        .from("household_members")
-        .insert({ household_id: household.id, user_id: userId, role: "owner" });
-
-      if (memberInsertErr) console.error("[UserCtx] member insert error:", memberInsertErr);
-      setHouseholdId(household.id);
     };
 
     // 5 秒兜底：getSession 卡住也强制释放 loading
