@@ -5,12 +5,16 @@ import { cookies } from "next/headers";
 export const runtime = "nodejs";
 
 interface SubmitBody {
+  // 租客信息
   name?: string;
   phone?: string;
   id_number?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   notes?: string;
+  // 中介信息（agent_register 模式下携带）
+  agent_name?: string;
+  agent_phone?: string;
 }
 
 // 简单中国大陆手机号校验
@@ -102,6 +106,9 @@ export async function POST(
     emergency_contact_name: body.emergency_contact_name?.trim() || null,
     emergency_contact_phone: body.emergency_contact_phone?.trim() || null,
     notes: body.notes?.trim() || null,
+    // 中介信息（如果是中介代填的话）
+    agent_name: body.agent_name?.trim() || null,
+    agent_phone: body.agent_phone?.trim() || null,
   };
 
   const { error: updateErr } = await supabase

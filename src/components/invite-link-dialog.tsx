@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Link as LinkIcon, Share2, Loader2, CheckCircle2 } from "lucide-react";
+import { Copy, Link as LinkIcon, Share2, Loader2, CheckCircle2, User, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,22 +17,23 @@ import { toast } from "sonner";
 interface InviteLinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 用途：默认租客自填，可扩展中介 */
-  purpose?: "tenant_register" | "agent_register";
+  /** 默认让用户在弹窗里选；指定值时锁定不让选 */
+  defaultPurpose?: "tenant_register" | "agent_register";
 }
 
 /**
  * 一键生成给租客/中介自填的公开链接。
- * 反馈 #6：房东不用手动录入，把链接发过去对方自己填。
+ * 反馈 #9：发起人在弹窗里选「发给租客」还是「发给中介」。
  */
 export function InviteLinkDialog({
   open,
   onOpenChange,
-  purpose = "tenant_register",
+  defaultPurpose = "tenant_register",
 }: InviteLinkDialogProps) {
   const [creating, setCreating] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [purpose, setPurpose] = useState<"tenant_register" | "agent_register">(defaultPurpose);
 
   const purposeLabel = purpose === "agent_register" ? "中介" : "租客";
 
@@ -114,7 +115,43 @@ export function InviteLinkDialog({
         </DialogHeader>
 
         {!url ? (
-          <div className="py-4">
+          <div className="py-4 space-y-3">
+            {/* 选发给谁 */}
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">发给谁填？</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPurpose("tenant_register")}
+                  className={`flex items-center justify-center gap-1.5 h-10 rounded-lg border text-sm font-medium transition-colors ${
+                    purpose === "tenant_register"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-muted-foreground"
+                  }`}
+                >
+                  <User className="h-4 w-4" />
+                  租客本人
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPurpose("agent_register")}
+                  className={`flex items-center justify-center gap-1.5 h-10 rounded-lg border text-sm font-medium transition-colors ${
+                    purpose === "agent_register"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-muted-foreground"
+                  }`}
+                >
+                  <Briefcase className="h-4 w-4" />
+                  中介代填
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                {purpose === "agent_register"
+                  ? "中介代填模式：表单会让中介同时填中介自己 + 租客信息"
+                  : "租客本人填模式：只需填租客自己的基本信息"}
+              </p>
+            </div>
+
             <Button
               type="button"
               onClick={handleGenerate}

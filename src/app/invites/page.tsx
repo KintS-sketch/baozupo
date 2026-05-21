@@ -46,6 +46,9 @@ interface SubmittedData {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   notes?: string;
+  // 中介模式下，submit 时一并存中介信息（采纳时一起带到租约表单的预填）
+  agent_name?: string;
+  agent_phone?: string;
 }
 
 export default function InvitesPage() {
@@ -301,10 +304,31 @@ export default function InvitesPage() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>租客自填资料</DialogTitle>
+            <DialogTitle>
+              {previewing?.purpose === "agent_register" ? "中介代填资料" : "租客自填资料"}
+            </DialogTitle>
           </DialogHeader>
           {previewing?.submitted_data && (
             <div className="space-y-3 text-sm">
+              {/* 中介模式下，先显示中介信息 */}
+              {previewing.purpose === "agent_register" && previewing.submitted_data.agent_name && (
+                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
+                  <p className="text-xs font-medium mb-2 text-foreground">中介信息</p>
+                  <div className="grid grid-cols-[5rem_1fr] gap-y-1 text-xs">
+                    <span className="text-muted-foreground">姓名</span>
+                    <span className="font-medium">{previewing.submitted_data.agent_name}</span>
+                    {previewing.submitted_data.agent_phone && (
+                      <>
+                        <span className="text-muted-foreground">电话</span>
+                        <span>{previewing.submitted_data.agent_phone}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              {previewing.purpose === "agent_register" && (
+                <p className="text-xs text-muted-foreground -mb-1">— 租客信息 —</p>
+              )}
               <div className="grid grid-cols-[5rem_1fr] gap-y-2">
                 <span className="text-muted-foreground">姓名</span>
                 <span className="font-medium">{previewing.submitted_data.name}</span>

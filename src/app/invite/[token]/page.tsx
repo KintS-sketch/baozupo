@@ -23,8 +23,11 @@ import { isValidPhone } from "@/lib/format";
 import { toast } from "sonner";
 import type { AiRecognizeIdCardResponse } from "@/types/ai";
 
+// 公开表单：租客本人填 / 中介代填
+// 租客模式只需要租客 5 个字段；中介模式 + 中介自己 2 个字段
 const schema = z.object({
-  name: z.string().min(1, "请输入姓名"),
+  // 租客信息（两种模式下都填）
+  name: z.string().min(1, "请输入租客姓名"),
   phone: z.string().refine(isValidPhone, "请输入有效的中国大陆手机号"),
   id_number: z.string().optional(),
   emergency_contact_name: z.string().optional(),
@@ -33,6 +36,12 @@ const schema = z.object({
     .optional()
     .refine((v) => !v || isValidPhone(v), "请输入有效的手机号"),
   notes: z.string().optional(),
+  // 中介信息（仅 agent_register 模式下展示）
+  agent_name: z.string().optional(),
+  agent_phone: z
+    .string()
+    .optional()
+    .refine((v) => !v || isValidPhone(v), "请输入有效的手机号"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -86,6 +95,8 @@ export default function InvitePage({
       emergency_contact_name: "",
       emergency_contact_phone: "",
       notes: "",
+      agent_name: "",
+      agent_phone: "",
     },
   });
 
@@ -230,23 +241,68 @@ export default function InvitePage({
 
   if (!invite) return null;
 
-  const purposeLabel =
-    invite.purpose === "agent_register" ? "中介信息登记" : "租客信息登记";
+  const isAgentMode = invite.purpose === "agent_register";
+  const purposeLabel = isAgentMode ? "中介代填租客信息" : "租客信息登记";
+  const subtitle = isAgentMode
+    ? "请填写中介本人 + 即将入住租客的信息"
+    : "房东邀请你填写信息 · 提交后将自动发送给房东";
 
   return (
     <div className="min-h-screen bg-muted/30 py-6">
       <div className="max-w-md mx-auto px-4 space-y-4">
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold">{purposeLabel}</h1>
-          <p className="text-xs text-muted-foreground">
-            房东邀请你填写信息 · 提交后将自动发送给房东
-          </p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
 
         <Card>
           <CardContent className="pt-4">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+                {/* 中介模式下：先填中介自己的信息 */}
+                {isAgentMode && (
+                  <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-3">
+                    <p className="text-sm font-medium flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      中介信息
+                    </p>
+                    <FormField
+                      control={form.control}
+                      name="agent_name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">中介姓名 *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="王经理" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="agent_phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">中介电话</FormLabel>
+                          <FormControl>
+                            <Input type="tel" placeholder="选填" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                {/* 分隔标题：下面是租客信息 */}
+                {isAgentMode && (
+                  <p className="text-sm font-medium text-foreground pt-1">
+                    <Sparkles className="inline h-4 w-4 text-primary mr-1" />
+                    租客信息
+                  </p>
+                )}
+
                 {/* AI 拍身份证识别按钮 */}
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-2">
                   <div className="flex items-center gap-2 text-sm text-foreground">
