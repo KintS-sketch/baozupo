@@ -277,15 +277,16 @@ export default function PropertyDetailPage({
     lease.lease_tenants?.[0]?.tenant?.name ??
     "—";
 
-  // 当期账单：今天在 period_start..period_end 内 + 所有未付清的（需关注）
-  // 这样房源详情页不会一次性铺 12 期，历史已付到「全部账单」或租约详情里看
+  // 当期账单 = 严格按 payment_cycle 的"现在这一期"，月付就 1 张这月、年付就 1 张这年。
+  // 加上已过期但未付清的（逾期/部分付）。未来的 pending 不显示。
   const todayDate = new Date();
   todayDate.setHours(0, 0, 0, 0);
   const currentBills = bills.filter((b) => {
-    if (b.status !== "paid") return true;
     const s = new Date(b.period_start);
     const e = new Date(b.period_end);
-    return todayDate >= s && todayDate <= e;
+    if (todayDate >= s && todayDate <= e) return true; // 今天在期间内
+    if (todayDate > e && b.status !== "paid") return true; // 已逾期未付清
+    return false;
   });
 
   return (

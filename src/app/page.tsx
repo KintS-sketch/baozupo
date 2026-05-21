@@ -96,7 +96,7 @@ export default function DashboardPage() {
           ).data?.map((l) => l.id) ?? []
         );
 
-      // 最近 5 条账单
+      // 当期账单：本期落在今天的 + 已逾期未付清。拉宽数据，前端过滤后再展示
       const { data: recentBillsData } = await supabase
         .from("bills")
         .select("*, lease:leases(property:properties(name), lease_tenants(tenant:tenants(name)))")
@@ -108,8 +108,8 @@ export default function DashboardPage() {
             .is("deleted_at", null)
           ).data?.map((l) => l.id) ?? []
         )
-        .order("created_at", { ascending: false })
-        .limit(5);
+        .order("period_start", { ascending: false })
+        .limit(50);
 
       // 即将到期租约（30天内）
       const thirtyDaysLater = format(
@@ -358,21 +358,32 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* 最近账单 */}
+      {/* 当期账单：今天落在 period 内 + 已逾期未付清；月付/年付各对应一张 */}
+      {(() => {
+        const today0 = new Date();
+        today0.setHours(0, 0, 0, 0);
+        const currentBills = recentBills.filter((b) => {
+          const s = new Date(b.period_start);
+          const e = new Date(b.period_end);
+          if (today0 >= s && today0 <= e) return true;
+          if (today0 > e && b.status !== "paid") return true;
+          return false;
+        });
+        return (
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">最近账单</h2>
+          <h2 className="text-base font-semibold">当期账单</h2>
           <Link href="/bills" className="text-xs text-primary font-medium">查看全部 ›</Link>
         </div>
-        {recentBills.length === 0 ? (
+        {currentBills.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              暂无账单数据
+              {recentBills.length === 0 ? "暂无账单数据" : "本期已收齐，去「全部账单」看历史"}
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-2">
-            {recentBills.map((bill) => (
+            {currentBills.map((bill) => (
               <Card key={bill.id}>
                 <CardContent className="px-4 py-3.5 flex items-center gap-3">
                   <div className="min-w-0 flex-1">
@@ -393,6 +404,8 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+        );
+      })()}
 
       {/* 底部温馨结尾 */}
       <p className="text-center text-xs text-muted-faint pt-2 pb-2">

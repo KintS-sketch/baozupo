@@ -134,14 +134,20 @@ export default function BillsPage() {
     return primary?.tenant?.name ?? bill.lease?.lease_tenants?.[0]?.tenant?.name ?? "—";
   };
 
-  // 当期 = 今天在 period_start..period_end 内，或状态非 paid（未付清的永远要看到）
+  // 当期 = 严格按 payment_cycle 算的"现在这一期"。
+  // 月付租约今天落在 7 月 → 只有 7 月那张是当期；其他 11 期是未来 pending，不显示。
+  // 年付租约今天落在 2026 → 只有 2026 那张当期。
+  // 已过期但未付清（overdue/partial）单独留下来提醒。
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const isCurrent = (b: BillWithLease) => {
-    if (b.status !== "paid") return true;
     const start = new Date(b.period_start);
     const end = new Date(b.period_end);
-    return today >= start && today <= end;
+    // 今天落在期间内 → 当期（无论 paid 还是 pending 都要显示）
+    if (today >= start && today <= end) return true;
+    // 期间已过但还没付清 → 逾期/部分付，仍要关注
+    if (today > end && b.status !== "paid") return true;
+    return false;
   };
 
   const filtered =
