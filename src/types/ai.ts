@@ -57,12 +57,38 @@ export interface AiRecognizeMeterResponse {
   tokens_used?: number;
 }
 
+/** AI 身份证识别 - 输出 */
+export interface AiIdCardRecognitionResult {
+  name: string | null;
+  id_number: string | null;            // 18 位身份证号
+  gender: "male" | "female" | null;
+  birthday: string | null;             // YYYY-MM-DD
+  address: string | null;
+  confidence: number;
+}
+
+/** AI 身份证识别 - 请求 */
+export interface AiRecognizeIdCardRequest {
+  image_base64: string;
+  media_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+}
+
+/** AI 身份证识别 - 响应 */
+export interface AiRecognizeIdCardResponse {
+  success: boolean;
+  data?: AiIdCardRecognitionResult;
+  error?: string;
+  model?: string;
+  tokens_used?: number;
+}
+
 /** AI 功能状态 */
 export type AiFeatureStatus = "available" | "coming_soon" | "disabled";
 
 export const AI_FEATURE_STATUS: Record<string, AiFeatureStatus> = {
   payment_recognition: "available",
   meter_recognition: "available",
+  id_card_recognition: "available",
   lease_ocr: "coming_soon",
   smart_reminder: "coming_soon",
 };
