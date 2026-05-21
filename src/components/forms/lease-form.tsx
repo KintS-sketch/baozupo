@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Paperclip, Upload, X } from "lucide-react";
+import { Loader2, Paperclip, Upload, X, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
+import { isValidPhone } from "@/lib/format";
 import type { Lease, Property, Tenant } from "@/types";
 
 const CONTRACT_MAX_BYTES = 10 * 1024 * 1024;
@@ -19,11 +20,24 @@ const CONTRACT_ACCEPT = "image/*,application/pdf";
 
 export interface LeaseFormExtras {
   contractFile: File | null;
+  // 新建租客模式下，前端 handler 需要先 create tenant 再 create lease
+  newTenant: NewTenantPayload | null;
+}
+
+export interface NewTenantPayload {
+  name: string;
+  phone: string;
+  id_number?: string;
 }
 
 const schema = z.object({
   property_id: z.string().min(1, "请选择房源"),
-  tenant_id: z.string().min(1, "请选择租客（主租客）"),
+  // 新增/已有：existing → 必须选 tenant_id；new → 必须填 new_tenant_name/phone
+  tenant_mode: z.enum(["existing", "new"]).default("new"),
+  tenant_id: z.string().optional(),
+  new_tenant_name: z.string().optional(),
+  new_tenant_phone: z.string().optional(),
+  new_tenant_id_number: z.string().optional(),
   start_date: z.string().min(1, "请选择起租日期"),
   end_date: z.string().min(1, "请选择结束日期"),
   monthly_rent: z.coerce.number().positive("租金必须大于0"),
@@ -31,12 +45,47 @@ const schema = z.object({
   payment_cycle: z.enum(["monthly", "quarterly", "biannual", "annual"]),
   rent_due_day: z.coerce.number().int().min(1, "至少1号").max(31, "最多31号"),
   billing_mode: z.enum(["natural_month", "rolling_month"]),
+  // 直租 / 中介
+  rental_source: z.enum(["direct", "agent"]).default("direct"),
+  agent_name: z.string().optional(),
+  agent_phone: z.string().optional(),
+  agent_fee: z.union([z.coerce.number().min(0, "中介费不能为负数"), z.literal("")]).optional(),
   generate_bills: z.boolean().default(true),
   notes: z.string().optional(),
-}).refine(
-  (data) => !data.start_date || !data.end_date || new Date(data.end_date) > new Date(data.start_date),
-  { message: "结束日期必须晚于起租日期", path: ["end_date"] }
-);
+})
+  .refine(
+    (data) => !data.start_date || !data.end_date || new Date(data.end_date) > new Date(data.start_date),
+    { message: "结束日期必须晚于起租日期", path: ["end_date"] }
+  )
+  .refine(
+    (data) => {
+      if (data.tenant_mode === "existing") return !!data.tenant_id;
+      return !!(data.new_tenant_name && data.new_tenant_name.trim().length > 0);
+    },
+    { message: "请填写租客姓名（或切换到选择已有租客）", path: ["new_tenant_name"] }
+  )
+  .refine(
+    (data) => {
+      if (data.tenant_mode !== "new") return true;
+      return !!(data.new_tenant_phone && isValidPhone(data.new_tenant_phone));
+    },
+    { message: "请输入有效的中国大陆手机号", path: ["new_tenant_phone"] }
+  )
+  .refine(
+    (data) => {
+      if (data.rental_source !== "agent") return true;
+      // 中介模式下中介姓名必填
+      return !!(data.agent_name && data.agent_name.trim().length > 0);
+    },
+    { message: "请填写中介姓名", path: ["agent_name"] }
+  )
+  .refine(
+    (data) => {
+      if (data.rental_source !== "agent" || !data.agent_phone) return true;
+      return isValidPhone(data.agent_phone);
+    },
+    { message: "请输入有效的中介手机号", path: ["agent_phone"] }
+  );
 
 export type LeaseFormValues = z.infer<typeof schema>;
 
@@ -67,14 +116,16 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
     setContractFile(file);
   };
 
-  const handleSubmitWithExtras = (values: LeaseFormValues) =>
-    onSubmit(values, { contractFile });
-
   const form = useForm<LeaseFormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       property_id: defaultValues?.property_id ?? "",
+      // 编辑模式下默认 existing（保留原租客）；新增时默认 new 引导一键填租客
+      tenant_mode: defaultValues?.id ? "existing" : "new",
       tenant_id: defaultValues?.tenant_id ?? "",
+      new_tenant_name: "",
+      new_tenant_phone: "",
+      new_tenant_id_number: "",
       start_date: defaultValues?.start_date ?? "",
       end_date: defaultValues?.end_date ?? "",
       monthly_rent: defaultValues?.monthly_rent ?? (0 as unknown as number),
@@ -82,10 +133,29 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
       payment_cycle: defaultValues?.payment_cycle ?? "monthly",
       rent_due_day: defaultValues?.rent_due_day ?? 1,
       billing_mode: defaultValues?.billing_mode ?? "natural_month",
+      rental_source: defaultValues?.rental_source ?? "direct",
+      agent_name: defaultValues?.agent_name ?? "",
+      agent_phone: defaultValues?.agent_phone ?? "",
+      agent_fee: defaultValues?.agent_fee ?? ("" as unknown as number),
       generate_bills: !defaultValues?.id,
       notes: defaultValues?.notes ?? "",
     },
   });
+
+  const tenantMode = form.watch("tenant_mode");
+  const rentalSource = form.watch("rental_source");
+
+  const handleSubmitWithExtras = (values: LeaseFormValues) => {
+    const newTenant: NewTenantPayload | null =
+      values.tenant_mode === "new"
+        ? {
+            name: values.new_tenant_name!.trim(),
+            phone: values.new_tenant_phone!.trim(),
+            id_number: values.new_tenant_id_number?.trim() || undefined,
+          }
+        : null;
+    return onSubmit(values, { contractFile, newTenant });
+  };
 
   useEffect(() => {
     if (!householdId) return;
@@ -96,6 +166,10 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
       ]);
       setProperties((propsData ?? []) as Property[]);
       setTenants((tenantsData ?? []) as Tenant[]);
+      // 没有任何租客时强制走"新增"模式，避免下拉空白
+      if (!defaultValues?.id && (tenantsData?.length ?? 0) === 0) {
+        form.setValue("tenant_mode", "new");
+      }
     };
     loadOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,30 +180,131 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitWithExtras)} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="property_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>房源 *</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="选择房源" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        {/* 房源 */}
+        <FormField
+          control={form.control}
+          name="property_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>房源 *</FormLabel>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <FormControl><SelectTrigger><SelectValue placeholder="选择房源" /></SelectTrigger></FormControl>
+                <SelectContent>
+                  {properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
+        {/* 租客：新增 vs 已有 切换 */}
+        {!isEditing && (
+          <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <UserPlus className="h-4 w-4 text-primary" />
+              租客信息
+            </div>
+
+            <FormField
+              control={form.control}
+              name="tenant_mode"
+              render={({ field }) => (
+                <div className="inline-flex p-1 bg-secondary rounded-lg gap-1">
+                  <button
+                    type="button"
+                    onClick={() => field.onChange("new")}
+                    className={`px-3 h-8 rounded-md text-xs font-medium transition-colors ${
+                      field.value === "new"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    <UserPlus className="inline h-3.5 w-3.5 mr-1" />
+                    新增租客
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => field.onChange("existing")}
+                    disabled={tenants.length === 0}
+                    className={`px-3 h-8 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      field.value === "existing"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    <Users className="inline h-3.5 w-3.5 mr-1" />
+                    选择已有 ({tenants.length})
+                  </button>
+                </div>
+              )}
+            />
+
+            {tenantMode === "new" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <FormField
+                  control={form.control}
+                  name="new_tenant_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>姓名 *</FormLabel>
+                      <FormControl><Input placeholder="张三" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="new_tenant_phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>手机号 *</FormLabel>
+                      <FormControl><Input type="tel" placeholder="13800138000" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="new_tenant_id_number"
+                  render={({ field }) => (
+                    <FormItem className="sm:col-span-2">
+                      <FormLabel>身份证号（选填）</FormLabel>
+                      <FormControl><Input placeholder="可在租客详情页用拍照识别补录" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            ) : (
+              <FormField
+                control={form.control}
+                name="tenant_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>选择主租客 *</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="选择租客" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {tenants.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 编辑时只显示已有租客选择（不允许在租约表里改成新增） */}
+        {isEditing && (
           <FormField
             control={form.control}
             name="tenant_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>主租客 *</FormLabel>
+                <FormLabel>主租客</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl><SelectTrigger><SelectValue placeholder="选择租客" /></SelectTrigger></FormControl>
                   <SelectContent>
@@ -140,7 +315,10 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
               </FormItem>
             )}
           />
+        )}
 
+        {/* 租约日期与金额 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="start_date"
@@ -238,6 +416,82 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
               </FormItem>
             )}
           />
+        </div>
+
+        {/* 租约来源：直租 vs 中介 */}
+        <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+          <FormField
+            control={form.control}
+            name="rental_source"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium">租约来源</FormLabel>
+                <div className="inline-flex p-1 bg-secondary rounded-lg gap-1">
+                  <button
+                    type="button"
+                    onClick={() => field.onChange("direct")}
+                    className={`px-3 h-8 rounded-md text-xs font-medium transition-colors ${
+                      field.value === "direct"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    直租
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => field.onChange("agent")}
+                    className={`px-3 h-8 rounded-md text-xs font-medium transition-colors ${
+                      field.value === "agent"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    通过中介
+                  </button>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {rentalSource === "agent" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="agent_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>中介姓名 *</FormLabel>
+                    <FormControl><Input placeholder="王经理" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="agent_phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>中介电话</FormLabel>
+                    <FormControl><Input type="tel" placeholder="选填" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="agent_fee"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>中介费（元，一次性）</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="例：1500.00" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
         </div>
 
         {!defaultValues?.id && (

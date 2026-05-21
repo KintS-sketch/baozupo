@@ -4,6 +4,7 @@
 
 export type PropertyStatus = "rented" | "vacant" | "renovating";
 export type LeaseStatus = "active" | "expired" | "terminated";
+export type RentalSource = "direct" | "agent";
 export type BillStatus = "pending" | "partial" | "paid" | "overdue";
 export type PaymentMethod = "wechat" | "alipay" | "bank" | "cash" | "other";
 export type PaymentCycle = "monthly" | "quarterly" | "biannual" | "annual";
@@ -87,6 +88,11 @@ export interface Lease {
   status: LeaseStatus;
   notes: string | null;
   contract_url: string | null;
+  // 新增（migration 0010）：直租 / 中介 来源
+  rental_source: RentalSource;
+  agent_name: string | null;
+  agent_phone: string | null;
+  agent_fee: number | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;

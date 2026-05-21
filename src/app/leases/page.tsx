@@ -153,14 +153,76 @@ export default function LeasesPage() {
   const handleSubmit = async (values: LeaseFormValues, extras: LeaseFormExtras) => {
     if (!householdId) return;
 
-    const { tenant_id, generate_bills, ...leaseData } = values;
-    const payload = { ...leaseData, household_id: householdId };
+    // 把表单字段拆开：lease 表用的 + 仅前端用的（tenant_mode/new_tenant_* / generate_bills）
+    const {
+      tenant_id: pickedTenantId,
+      tenant_mode,
+      new_tenant_name,
+      new_tenant_phone,
+      new_tenant_id_number,
+      generate_bills,
+      agent_fee,
+      ...leaseRest
+    } = values;
+
+    // 中介费 "" → null
+    const normalizedAgentFee =
+      agent_fee === "" || agent_fee === undefined || agent_fee === null
+        ? null
+        : Number(agent_fee);
+
+    // 直租时清空中介字段，避免 UI 切换后残留脏数据
+    const payload = {
+      ...leaseRest,
+      household_id: householdId,
+      agent_name: leaseRest.rental_source === "agent" ? leaseRest.agent_name ?? null : null,
+      agent_phone: leaseRest.rental_source === "agent" ? leaseRest.agent_phone ?? null : null,
+      agent_fee: leaseRest.rental_source === "agent" ? normalizedAgentFee : null,
+    };
 
     if (editing) {
       const { error } = await supabase.from("leases").update(payload).eq("id", editing.id);
       if (error) { toast.error("保存失败"); return; }
+      // 编辑时如果换了主租客，更新 lease_tenants
+      if (pickedTenantId) {
+        const currentPrimary = editing.lease_tenants?.find((lt) => lt.is_primary)?.tenant?.id;
+        if (currentPrimary !== pickedTenantId) {
+          await supabase.from("lease_tenants").delete().eq("lease_id", editing.id);
+          await supabase.from("lease_tenants").insert({
+            lease_id: editing.id,
+            tenant_id: pickedTenantId,
+            is_primary: true,
+          });
+        }
+      }
       toast.success("租约已更新");
     } else {
+      // 新增模式：如果选了"新增租客"，先 create tenant 拿 id
+      let tenant_id = pickedTenantId ?? "";
+      if (tenant_mode === "new" && extras.newTenant) {
+        const { data: newTenant, error: tErr } = await supabase
+          .from("tenants")
+          .insert({
+            household_id: householdId,
+            name: extras.newTenant.name,
+            phone: extras.newTenant.phone,
+            id_type: "id_card",
+            id_number: extras.newTenant.id_number ?? null,
+          })
+          .select("id")
+          .single();
+        if (tErr || !newTenant) {
+          toast.error("创建租客失败：" + (tErr?.message ?? "未知"));
+          return;
+        }
+        tenant_id = newTenant.id;
+      }
+
+      if (!tenant_id) {
+        toast.error("请填写或选择主租客");
+        return;
+      }
+
       const { data: newLease, error } = await supabase.from("leases").insert(payload).select().single();
       if (error || !newLease) { toast.error("创建失败：" + error?.message); return; }
 
@@ -480,6 +542,31 @@ export default function LeasesPage() {
                 <span>每月 {viewing.rent_due_day} 号</span>
                 <span className="text-muted-foreground">账单模式</span>
                 <span>{BILLING_MODE_LABELS[viewing.billing_mode]}</span>
+                <span className="text-muted-foreground">租约来源</span>
+                <span>
+                  {viewing.rental_source === "agent" ? (
+                    <>
+                      通过中介
+                      {viewing.agent_name && (
+                        <span className="text-muted-foreground"> · {viewing.agent_name}</span>
+                      )}
+                    </>
+                  ) : (
+                    "直租"
+                  )}
+                </span>
+                {viewing.rental_source === "agent" && viewing.agent_phone && (
+                  <>
+                    <span className="text-muted-foreground">中介电话</span>
+                    <span>{viewing.agent_phone}</span>
+                  </>
+                )}
+                {viewing.rental_source === "agent" && viewing.agent_fee != null && (
+                  <>
+                    <span className="text-muted-foreground">中介费</span>
+                    <span>{formatCurrency(viewing.agent_fee)}</span>
+                  </>
+                )}
                 <span className="text-muted-foreground">状态</span>
                 <Badge variant={STATUS_BADGE[viewing.status]}>{LEASE_STATUS_LABELS[viewing.status]}</Badge>
               </div>
