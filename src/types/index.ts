@@ -65,6 +65,7 @@ export interface Tenant {
   phone: string;
   id_type: IdType;
   id_number: string | null; // 敏感字段，UI层需脱敏展示
+  wechat_id: string | null; // 微信号（migration 0012）
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   notes: string | null;

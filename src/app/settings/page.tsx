@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, LogOut, ChevronRight, Loader2, CreditCard, FileText, Bell, Gauge, MessageCircle, Check, Calculator, Sparkles } from "lucide-react";
+import { User, LogOut, ChevronRight, Loader2, CreditCard, Bell, Gauge, MessageCircle, Check, Calculator, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,10 +29,10 @@ const WECHAT_STATUS_TOAST: Record<string, { type: "success" | "error" | "warning
   server_error:         { type: "error",   msg: "服务端配置异常，请联系管理员" },
 };
 
+// 租约入口在底部导航已有，这里不重复
 const QUICK_LINKS = [
   { href: "/tax", label: "个税助手", icon: Calculator, desc: "年度租金汇总，方便申报个税" },
   { href: "/reminders", label: "提醒中心", icon: Bell, desc: "查看待处理提醒" },
-  { href: "/leases", label: "租约管理", icon: FileText, desc: "查看和管理租约" },
   { href: "/meters", label: "抄表记录", icon: Gauge, desc: "水电气表读数" },
   { href: "/payments", label: "收款记录", icon: CreditCard, desc: "历史收款流水" },
 ];

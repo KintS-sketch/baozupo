@@ -219,7 +219,10 @@ export default function LeasesPage() {
             name: extras.newTenant.name,
             phone: extras.newTenant.phone,
             id_type: "id_card",
-            id_number: extras.newTenant.id_number ?? null,
+            id_number: extras.newTenant.id_number,
+            wechat_id: extras.newTenant.wechat_id,
+            emergency_contact_name: extras.newTenant.emergency_contact_name,
+            emergency_contact_phone: extras.newTenant.emergency_contact_phone,
           })
           .select("id")
           .single();
