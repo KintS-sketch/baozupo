@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink, Users, Link as LinkIcon } from "lucide-react";
 import { InviteLinkDialog } from "@/components/invite-link-dialog";
@@ -66,7 +66,16 @@ type LeaseWithRelations = Lease & {
   attachment_count?: number;
 };
 
+// Next 15 强制要求用 useSearchParams 的客户端组件包在 Suspense 里
 export default function LeasesPage() {
+  return (
+    <Suspense fallback={<div className="flex h-full items-center justify-center py-32"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+      <LeasesPageInner />
+    </Suspense>
+  );
+}
+
+function LeasesPageInner() {
   const { householdId, loading: userLoading } = useUser();
   const [leases, setLeases] = useState<LeaseWithRelations[]>([]);
   const [loading, setLoading] = useState(true);

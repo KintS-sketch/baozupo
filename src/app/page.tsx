@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, AlertCircle, Loader2, Clock, Bell, ChevronRight } from "lucide-react";
+import { Building2, AlertCircle, Loader2, Clock, Bell, ChevronRight, Contact } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BrandMark } from "@/components/brand-mark";
+import { ContactsDialog } from "@/components/contacts-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [expiringLeases, setExpiringLeases] = useState<Lease[]>([]);
   const [pendingReminders, setPendingReminders] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [contactsOpen, setContactsOpen] = useState(false);
 
   useEffect(() => {
     if (userLoading) return;
@@ -221,9 +222,17 @@ export default function DashboardPage() {
           <p className="text-xs text-muted-foreground mt-0.5">{greeting.sub}</p>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-2">{currentMonth}</h1>
         </div>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary shadow-soft">
-          <BrandMark size={26} />
-        </div>
+        {/* 反馈 #13: 联系人按钮 — 一键看所有租客+中介，可复制电话/微信 */}
+        <button
+          type="button"
+          onClick={() => setContactsOpen(true)}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary shadow-soft hover:bg-primary/15 active:scale-95 transition-all relative group"
+          aria-label="联系人"
+        >
+          <Contact className="h-6 w-6" strokeWidth={1.8} />
+          {/* 小红点提示：有联系人就显示一个柔和的脉冲点 */}
+          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary/60 ring-2 ring-background opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
       </div>
 
       {/* 待处理提醒 */}
@@ -411,6 +420,9 @@ export default function DashboardPage() {
       <p className="text-center text-xs text-muted-faint pt-2 pb-2">
         慢慢经营，每一套房都有故事
       </p>
+
+      {/* 反馈 #13: 联系人弹窗 */}
+      <ContactsDialog open={contactsOpen} onOpenChange={setContactsOpen} />
     </div>
   );
 }
