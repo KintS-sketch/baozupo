@@ -217,13 +217,14 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
               <FormItem>
                 <FormLabel>面积</FormLabel>
                 <FormControl>
-                  <div className="relative">
+                  {/* max-w 限宽，跟左侧户型 3 数字框视觉对齐 */}
+                  <div className="relative max-w-[160px]">
                     <Input
                       type="number"
                       inputMode="decimal"
                       step="0.01"
                       placeholder=""
-                      className="pr-10"
+                      className="pr-10 text-right"
                       {...field}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
