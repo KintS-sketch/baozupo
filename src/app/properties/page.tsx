@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Building2, MoreVertical, Edit, Trash2, Loader2, MapPin } from "lucide-react";
+import { Plus, Building2, MoreVertical, Edit, Trash2, Loader2, MapPin, User, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +18,17 @@ import { useUser } from "@/contexts/user-context";
 import { PROPERTY_STATUS_LABELS } from "@/types";
 import type { Property } from "@/types";
 import { canAddProperty, isProActive, PLAN_LIMITS } from "@/lib/subscription";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { toast } from "sonner";
+
+// 一套房源对应的"当前生效租约"摘要，列表卡片上展示用
+interface ActiveLeaseSummary {
+  id: string;
+  start_date: string;
+  end_date: string;
+  monthly_rent: number;
+  primary_tenant_name: string | null;
+}
 
 const STATUS_BADGE_VARIANTS: Record<string, "success" | "muted" | "warning"> = {
   rented: "success",
@@ -30,6 +40,8 @@ export default function PropertiesPage() {
   const { householdId, subscription, loading: userLoading } = useUser();
   const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
+  // 当前生效租约：property_id → 摘要。空置房源里没有 key。
+  const [activeLeases, setActiveLeases] = useState<Record<string, ActiveLeaseSummary>>({});
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Property | null>(null);
@@ -49,7 +61,63 @@ export default function PropertiesPage() {
       .eq("household_id", householdId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
-    if (!error) setProperties(data ?? []);
+    if (error) {
+      setLoading(false);
+      return;
+    }
+    const list = (data ?? []) as Property[];
+    setProperties(list);
+
+    // 一次性拉所有"生效中"的租约（含主租客名），前端按 property_id group
+    // 同一房源理论上只能有 1 个 active 租约（UI 限制），这里取最新一条兜底
+    if (list.length > 0) {
+      const ids = list.map((p) => p.id);
+      const { data: leaseRows } = await supabase
+        .from("leases")
+        .select(
+          "id, property_id, start_date, end_date, monthly_rent, created_at, lease_tenants(is_primary, tenant:tenants(name))"
+        )
+        .in("property_id", ids)
+        .eq("status", "active")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      // supabase-js 把 1:N 关联返回为数组（即便只有一条），这里取第一个元素
+      type LeaseRow = {
+        id: string;
+        property_id: string;
+        start_date: string;
+        end_date: string;
+        monthly_rent: number;
+        created_at: string;
+        lease_tenants: Array<{
+          is_primary: boolean;
+          tenant: { name: string } | Array<{ name: string }> | null;
+        }>;
+      };
+      const tenantName = (t: LeaseRow["lease_tenants"][number]["tenant"]): string | null => {
+        if (!t) return null;
+        if (Array.isArray(t)) return t[0]?.name ?? null;
+        return t.name ?? null;
+      };
+      const map: Record<string, ActiveLeaseSummary> = {};
+      for (const row of (leaseRows ?? []) as unknown as LeaseRow[]) {
+        // order desc + 已存在 key 则跳过 → 保留最新一条
+        if (map[row.property_id]) continue;
+        const primaryLt = row.lease_tenants?.find((lt) => lt.is_primary) ?? row.lease_tenants?.[0];
+        const primary = tenantName(primaryLt?.tenant ?? null);
+        map[row.property_id] = {
+          id: row.id,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          monthly_rent: row.monthly_rent,
+          primary_tenant_name: primary,
+        };
+      }
+      setActiveLeases(map);
+    } else {
+      setActiveLeases({});
+    }
     setLoading(false);
   };
 
@@ -177,7 +245,9 @@ export default function PropertiesPage() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {properties.map((property) => (
+          {properties.map((property) => {
+            const lease = activeLeases[property.id];
+            return (
             <Card key={property.id} className="group hover:border-primary/30 transition-colors relative">
               <Link href={`/properties/${property.id}`} className="block">
                 <CardContent className="pt-4 pr-12">
@@ -216,6 +286,34 @@ export default function PropertiesPage() {
                     </div>
                   )}
 
+                  {/* 当前生效租约信息（仅出租中房源显示） */}
+                  {lease ? (
+                    <div className="mt-3 pt-3 border-t border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs text-foreground min-w-0">
+                          <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">
+                            {lease.primary_tenant_name ?? "未填写租客"}
+                          </span>
+                        </div>
+                        <span className="text-sm font-semibold text-primary shrink-0">
+                          {formatCurrency(lease.monthly_rent)}
+                          <span className="text-[11px] font-normal text-muted-foreground">/月</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          {formatDate(lease.start_date)} — {formatDate(lease.end_date)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : property.status === "rented" ? (
+                    <div className="mt-3 pt-3 border-t border-border/60">
+                      <p className="text-xs text-muted-foreground">暂无生效租约，可去「租约」页添加</p>
+                    </div>
+                  ) : null}
+
                   {property.notes && (
                     <p className="mt-2 text-xs text-muted-foreground line-clamp-1">{property.notes}</p>
                   )}
@@ -246,7 +344,8 @@ export default function PropertiesPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
