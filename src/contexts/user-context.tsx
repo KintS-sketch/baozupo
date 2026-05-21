@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { type User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { toSubscription, type Subscription } from "@/lib/subscription";
@@ -26,11 +27,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const initRef = useRef(false);
   // 单飞锁：防止 getSession + onAuthStateChange("SIGNED_IN") 并发调用 ensureHousehold
   // 之前没锁导致每次刷新都新建 household，user 累积 30+ 个"我的家庭组"
   // 关联 bug 修复 commit 见 git blame
   const ensuringRef = useRef<Promise<void> | null>(null);
+  // visibility 切换时限频，避免用户频繁 alt-tab 触发过多 refetch
+  const lastVisRefreshRef = useRef(0);
 
   const fetchSubscription = async (userId: string) => {
     const supabase = createClient();
@@ -165,7 +169,37 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // 切回前台时的恢复策略（应对手机浏览器后台 freeze tab 导致页面卡死）
+    // 三层防御：
+    // 1. 强制释放 loading 状态（如果还卡着）
+    // 2. 重新 getSession（自动 refresh expired token）
+    // 3. router.refresh() 触发 server components 重新 fetch 数据
+    // 用 30 秒限频避免频繁 alt-tab 拖慢应用
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastVisRefreshRef.current < 30_000) return;
+      lastVisRefreshRef.current = now;
+
+      // 1. 释放可能卡住的 loading 状态
+      setLoading((prev) => {
+        if (prev) console.warn("[UserCtx] released stuck loading on visibility");
+        return false;
+      });
+
+      // 2. 静默 refresh session（token 过期时会自动续期）
+      supabase.auth.getSession().catch(() => {});
+
+      // 3. 触发 Next.js Server Components 重新 fetch
+      router.refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     void authSub;
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      authSub.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
