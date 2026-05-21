@@ -277,6 +277,17 @@ export default function PropertyDetailPage({
     lease.lease_tenants?.[0]?.tenant?.name ??
     "—";
 
+  // 当期账单：今天在 period_start..period_end 内 + 所有未付清的（需关注）
+  // 这样房源详情页不会一次性铺 12 期，历史已付到「全部账单」或租约详情里看
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const currentBills = bills.filter((b) => {
+    if (b.status !== "paid") return true;
+    const s = new Date(b.period_start);
+    const e = new Date(b.period_end);
+    return todayDate >= s && todayDate <= e;
+  });
+
   return (
     <div className="p-4 md:p-6 max-w-3xl space-y-5 pb-20">
       {/* 顶部 */}
@@ -449,14 +460,14 @@ export default function PropertyDetailPage({
         )}
       </section>
 
-      {/* 账单 */}
+      {/* 账单 — 只显示当期 + 未付清，避免铺 12 期。历史在租约详情/全部账单看 */}
       <section>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-semibold flex items-center gap-2">
             <Receipt className="h-4 w-4" />
-            账单
+            当期账单
             <span className="text-xs text-muted-foreground font-normal">
-              （共 {bills.length} 期）
+              （{currentBills.length} 张需要关注 · 共 {bills.length} 期）
             </span>
           </h2>
           <Link href="/bills" className="text-xs text-primary font-medium">
@@ -469,10 +480,16 @@ export default function PropertyDetailPage({
               暂无账单数据
             </CardContent>
           </Card>
+        ) : currentBills.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-sm text-muted-foreground">
+              本期账单已收齐，可在「全部账单」查看历史
+            </CardContent>
+          </Card>
         ) : (
           <Card>
             <CardContent className="divide-y divide-border p-0">
-              {bills.slice(0, 6).map((b) => (
+              {currentBills.map((b) => (
                 <div key={b.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">

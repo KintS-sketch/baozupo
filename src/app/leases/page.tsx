@@ -15,8 +15,8 @@ import { LeaseForm, type LeaseFormValues, type LeaseFormExtras } from "@/compone
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { LEASE_STATUS_LABELS, PAYMENT_CYCLE_LABELS, BILLING_MODE_LABELS } from "@/types";
-import type { Lease, LeaseStatus } from "@/types";
+import { LEASE_STATUS_LABELS, PAYMENT_CYCLE_LABELS, BILLING_MODE_LABELS, BILL_STATUS_LABELS } from "@/types";
+import type { Lease, LeaseStatus, BillStatus } from "@/types";
 import { generateBillPeriods, calculateBillStatus } from "@/lib/billing";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -26,6 +26,25 @@ const STATUS_BADGE: Record<LeaseStatus, "success" | "muted" | "destructive"> = {
   expired: "muted",
   terminated: "destructive",
 };
+
+// 「交付情况」里给账单按状态上色
+const BILL_BADGE: Record<BillStatus, "warning" | "info" | "success" | "destructive"> = {
+  pending: "warning",
+  partial: "info",
+  paid: "success",
+  overdue: "destructive",
+};
+
+// 同结构 BillRow 用于「交付情况」拉数据
+interface LeaseBillRow {
+  id: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  total_amount: number;
+  paid_amount: number;
+  status: BillStatus;
+}
 
 type LeaseWithRelations = Lease & {
   property: { name: string };
@@ -45,6 +64,8 @@ export default function LeasesPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | LeaseStatus>("all");
   const [leaseAttachments, setLeaseAttachments] = useState<Array<{ id: string; file_name: string; file_url: string; created_at: string }>>([]);
   const [leaseSignedUrls, setLeaseSignedUrls] = useState<Record<string, string>>({});
+  // 当前查看的租约的「交付情况」账单列表
+  const [leaseBills, setLeaseBills] = useState<LeaseBillRow[]>([]);
 
   const supabase = createClient();
 
@@ -71,10 +92,21 @@ export default function LeasesPage() {
     }
   };
 
+  const fetchLeaseBills = async (leaseId: string) => {
+    const { data } = await supabase
+      .from("bills")
+      .select("id, period_start, period_end, due_date, total_amount, paid_amount, status")
+      .eq("lease_id", leaseId)
+      .order("period_start", { ascending: true });
+    setLeaseBills((data ?? []) as LeaseBillRow[]);
+  };
+
   const openDetail = (lease: LeaseWithRelations) => {
     setViewing(lease);
     setDetailOpen(true);
+    setLeaseBills([]);
     fetchLeaseAttachments(lease.id);
+    fetchLeaseBills(lease.id);
   };
 
   const fetchLeases = async () => {
@@ -457,6 +489,59 @@ export default function LeasesPage() {
                   <p className="bg-muted rounded p-2 text-xs">{viewing.notes}</p>
                 </div>
               )}
+
+              {/* 交付情况：本租约下所有账单，按日期顺序展示
+                  房源详情/账单页都只显示当期，历史在这里完整看到 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-medium flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5" />
+                    交付情况
+                  </p>
+                  {leaseBills.length > 0 && (() => {
+                    const paid = leaseBills.filter((b) => b.status === "paid").length;
+                    return (
+                      <span className="text-[11px] text-muted-foreground">
+                        已收 {paid} / 共 {leaseBills.length} 期
+                      </span>
+                    );
+                  })()}
+                </div>
+                {leaseBills.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4 bg-muted/30 rounded">
+                    暂无账单数据
+                  </p>
+                ) : (
+                  <div className="divide-y divide-border rounded-lg border border-border max-h-64 overflow-y-auto">
+                    {leaseBills.map((b) => (
+                      <div key={b.id} className="flex items-center gap-2 px-3 py-2 text-xs">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
+                            {formatDate(b.period_start)} — {formatDate(b.period_end)}
+                          </p>
+                          <p className="text-muted-foreground">到期 {formatDate(b.due_date)}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="num font-semibold">
+                            {formatCurrency(b.total_amount)}
+                          </p>
+                          {b.status === "partial" && (
+                            <p className="num text-[10px] text-muted-foreground">
+                              已收 {formatCurrency(b.paid_amount)}
+                            </p>
+                          )}
+                        </div>
+                        <Badge
+                          variant={BILL_BADGE[b.status]}
+                          className="shrink-0 text-[10px] px-1.5 py-0"
+                        >
+                          {BILL_STATUS_LABELS[b.status]}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* 合同 / 附件 */}
               <div>

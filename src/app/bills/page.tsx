@@ -31,11 +31,16 @@ type BillWithLease = Bill & {
   };
 };
 
+// "current" 当期视图：今天落在 period_start..period_end 区间内的账单，
+// 或还没付清的（pending/partial/overdue），这些都需要关注。
+type BillFilterValue = "current" | "all" | BillStatus;
+
 export default function BillsPage() {
   const { householdId, loading: userLoading } = useUser();
   const [bills, setBills] = useState<BillWithLease[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<"all" | BillStatus>("all");
+  // 默认显示"当期"：避免一年合同 12 期一次性铺开，把用户的注意力拉到需要处理的账单
+  const [statusFilter, setStatusFilter] = useState<BillFilterValue>("current");
   const [payingBill, setPayingBill] = useState<BillWithLease | null>(null);
   const [billFormOpen, setBillFormOpen] = useState(false);
 
@@ -129,13 +134,29 @@ export default function BillsPage() {
     return primary?.tenant?.name ?? bill.lease?.lease_tenants?.[0]?.tenant?.name ?? "—";
   };
 
-  const filtered = statusFilter === "all" ? bills : bills.filter((b) => b.status === statusFilter);
+  // 当期 = 今天在 period_start..period_end 内，或状态非 paid（未付清的永远要看到）
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isCurrent = (b: BillWithLease) => {
+    if (b.status !== "paid") return true;
+    const start = new Date(b.period_start);
+    const end = new Date(b.period_end);
+    return today >= start && today <= end;
+  };
+
+  const filtered =
+    statusFilter === "all"
+      ? bills
+      : statusFilter === "current"
+        ? bills.filter(isCurrent)
+        : bills.filter((b) => b.status === statusFilter);
 
   // 统计各状态数量
   const counts = bills.reduce<Record<string, number>>((acc, b) => {
     acc[b.status] = (acc[b.status] ?? 0) + 1;
     return acc;
   }, {});
+  const currentCount = bills.filter(isCurrent).length;
 
   if (userLoading || loading) {
     return (
@@ -164,11 +185,12 @@ export default function BillsPage() {
       <div className="mb-4 -mx-1 px-1 overflow-x-auto">
         <div className="inline-flex p-1 bg-secondary rounded-xl gap-1 min-w-full">
           {[
-            { v: "all", label: "全部", count: bills.length },
+            { v: "current", label: "当期", count: currentCount },
+            { v: "overdue", label: "逾期", count: counts.overdue ?? 0 },
             { v: "pending", label: "待收", count: counts.pending ?? 0 },
             { v: "partial", label: "部分", count: counts.partial ?? 0 },
-            { v: "overdue", label: "逾期", count: counts.overdue ?? 0 },
             { v: "paid", label: "已收", count: counts.paid ?? 0 },
+            { v: "all", label: "全部", count: bills.length },
           ].map((t) => {
             const active = statusFilter === t.v;
             return (
@@ -194,8 +216,18 @@ export default function BillsPage() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={Receipt}
-          title="没有符合条件的账单"
-          description={statusFilter === "all" ? "账单将在创建租约后自动或手动生成" : undefined}
+          title={
+            statusFilter === "current"
+              ? "当期没有需要处理的账单"
+              : "没有符合条件的账单"
+          }
+          description={
+            statusFilter === "all"
+              ? "账单将在创建租约后自动或手动生成"
+              : statusFilter === "current"
+                ? "所有账单都已收齐。切到「已收」或「全部」可看历史。"
+                : undefined
+          }
         />
       ) : (
         <div className="space-y-2.5">
