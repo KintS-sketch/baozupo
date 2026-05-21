@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Users, MoreVertical, Edit, Trash2, Loader2, Phone, Building2 } from "lucide-react";
+import { Plus, Users, MoreVertical, Edit, Trash2, Loader2, Phone, Building2, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/empty-state";
 import { TenantForm, type TenantFormValues } from "@/components/forms/tenant-form";
+import { InviteLinkDialog } from "@/components/invite-link-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { maskPhone, maskIdNumber, formatCurrency, formatDate } from "@/lib/format";
@@ -40,6 +41,7 @@ export default function TenantsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -128,15 +130,21 @@ export default function TenantsPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-2">
         <div>
           <h1 className="text-xl font-bold">租客管理</h1>
           <p className="text-sm text-muted-foreground">共 {tenants.length} 位租客</p>
         </div>
-        <Button onClick={openAdd}>
-          <Plus className="h-4 w-4 mr-1" />
-          添加租客
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setInviteOpen(true)}>
+            <LinkIcon className="h-4 w-4 mr-1" />
+            邀请填表
+          </Button>
+          <Button onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-1" />
+            添加租客
+          </Button>
+        </div>
       </div>
 
       {tenants.length === 0 ? (
@@ -291,6 +299,9 @@ export default function TenantsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 邀请租客自填弹窗（反馈 #6） */}
+      <InviteLinkDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   );
 }

@@ -38,11 +38,13 @@ export async function middleware(request: NextRequest) {
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
+  // /invite/* 是公开邀请页（租客/中介自填），不强制登录
+  const isPublicInvite = request.nextUrl.pathname.startsWith("/invite");
   const isPublicAsset =
     request.nextUrl.pathname.startsWith("/_next") ||
     request.nextUrl.pathname.includes(".");
 
-  if (!user && !isAuthRoute && !isApiRoute && !isPublicAsset) {
+  if (!user && !isAuthRoute && !isApiRoute && !isPublicAsset && !isPublicInvite) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

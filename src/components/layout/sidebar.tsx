@@ -16,6 +16,7 @@ import {
   Sparkles,
   Settings,
   LogOut,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/", label: "首页概览", icon: LayoutDashboard },
   { href: "/properties", label: "房源管理", icon: Building2 },
   { href: "/tenants", label: "租客管理", icon: Users },
+  { href: "/invites", label: "邀请箱", icon: Inbox },
   { href: "/leases", label: "租约管理", icon: FileText },
   { href: "/bills", label: "账单管理", icon: Receipt },
   { href: "/payments", label: "收款记录", icon: CreditCard },
@@ -36,7 +38,8 @@ const navItems = [
 ];
 
 // 这些路径下不显示侧边栏（未登录或认证相关）
-const HIDE_SIDEBAR_PREFIXES = ["/login", "/api/auth"];
+// /invite/* 是无需登录的公开表单（租客/中介自填），不显示侧边栏
+const HIDE_SIDEBAR_PREFIXES = ["/login", "/api/auth", "/invite"];
 
 export function Sidebar() {
   const pathname = usePathname();

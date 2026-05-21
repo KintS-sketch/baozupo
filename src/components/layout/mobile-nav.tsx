@@ -19,8 +19,8 @@ const mobileNavItems = [
   { href: "/settings", label: "更多", icon: MoreHorizontal },
 ];
 
-// 这些路径下不显示底部导航（未登录或认证相关）
-const HIDE_NAV_PREFIXES = ["/login", "/api/auth"];
+// 这些路径下不显示底部导航（未登录或认证相关 / 公开邀请表单）
+const HIDE_NAV_PREFIXES = ["/login", "/api/auth", "/invite"];
 
 export function MobileNav() {
   const pathname = usePathname();
