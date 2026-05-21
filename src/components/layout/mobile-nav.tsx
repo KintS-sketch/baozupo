@@ -5,16 +5,17 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
-  Users,
+  FileText,
   Receipt,
   MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// 反馈 #8: 租客合并到租约，底部导航把"租客"换成"租约"
 const mobileNavItems = [
   { href: "/", label: "概览", icon: LayoutDashboard },
   { href: "/properties", label: "房源", icon: Building2 },
-  { href: "/tenants", label: "租客", icon: Users },
+  { href: "/leases", label: "租约", icon: FileText },
   { href: "/bills", label: "账单", icon: Receipt },
   { href: "/settings", label: "更多", icon: MoreHorizontal },
 ];

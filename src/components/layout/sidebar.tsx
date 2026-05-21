@@ -23,12 +23,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 
+// 反馈 #8: 租客管理与租约合并，租客信息内嵌在租约里，独立菜单隐藏。
+// /tenants 页面保留（旧链接还能用），但不在导航暴露
 const navItems = [
   { href: "/", label: "首页概览", icon: LayoutDashboard },
   { href: "/properties", label: "房源管理", icon: Building2 },
-  { href: "/tenants", label: "租客管理", icon: Users },
-  { href: "/invites", label: "邀请箱", icon: Inbox },
   { href: "/leases", label: "租约管理", icon: FileText },
+  { href: "/invites", label: "邀请箱", icon: Inbox },
   { href: "/bills", label: "账单管理", icon: Receipt },
   { href: "/payments", label: "收款记录", icon: CreditCard },
   { href: "/meters", label: "抄表记录", icon: Gauge },

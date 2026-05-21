@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink } from "lucide-react";
+import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,7 +48,19 @@ interface LeaseBillRow {
 
 type LeaseWithRelations = Lease & {
   property: { name: string };
-  lease_tenants: Array<{ is_primary: boolean; tenant: { id: string; name: string } }>;
+  // 合并租客模块后，租约详情要展示租客完整信息（手机/证件/紧急联系人）
+  lease_tenants: Array<{
+    is_primary: boolean;
+    tenant: {
+      id: string;
+      name: string;
+      phone: string;
+      id_type: string;
+      id_number: string | null;
+      emergency_contact_name: string | null;
+      emergency_contact_phone: string | null;
+    };
+  }>;
   attachment_count?: number;
 };
 
@@ -113,7 +125,7 @@ export default function LeasesPage() {
     if (!householdId) return;
     const { data, error } = await supabase
       .from("leases")
-      .select("*, property:properties(name), lease_tenants(is_primary, tenant:tenants(id, name))")
+      .select("*, property:properties(name), lease_tenants(is_primary, tenant:tenants(id, name, phone, id_type, id_number, emergency_contact_name, emergency_contact_phone))")
       .eq("household_id", householdId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
@@ -570,6 +582,54 @@ export default function LeasesPage() {
                 <span className="text-muted-foreground">状态</span>
                 <Badge variant={STATUS_BADGE[viewing.status]}>{LEASE_STATUS_LABELS[viewing.status]}</Badge>
               </div>
+
+              {/* 租客详细信息：合并到租约后，租客是租约的一等公民 */}
+              {(() => {
+                const primaryLt = viewing.lease_tenants?.find((lt) => lt.is_primary) ?? viewing.lease_tenants?.[0];
+                const t = primaryLt?.tenant;
+                if (!t) return null;
+                return (
+                  <div className="rounded-lg bg-muted/30 border border-border p-3">
+                    <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-primary" />
+                      租客信息
+                    </p>
+                    <div className="grid grid-cols-2 gap-y-1.5 text-xs">
+                      <span className="text-muted-foreground">姓名</span>
+                      <span className="font-medium">{t.name}</span>
+                      <span className="text-muted-foreground">手机号</span>
+                      <span>
+                        <a href={`tel:${t.phone}`} className="text-primary">
+                          {t.phone}
+                        </a>
+                      </span>
+                      {t.id_number && (
+                        <>
+                          <span className="text-muted-foreground">证件号</span>
+                          <span className="font-mono text-[11px] break-all">{t.id_number}</span>
+                        </>
+                      )}
+                      {t.emergency_contact_name && (
+                        <>
+                          <span className="text-muted-foreground">紧急联系人</span>
+                          <span>
+                            {t.emergency_contact_name}
+                            {t.emergency_contact_phone && (
+                              <>
+                                <span className="text-muted-foreground"> · </span>
+                                <a href={`tel:${t.emergency_contact_phone}`} className="text-primary">
+                                  {t.emergency_contact_phone}
+                                </a>
+                              </>
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {viewing.notes && (
                 <div>
                   <p className="text-muted-foreground mb-1">备注</p>
