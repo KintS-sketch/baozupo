@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PROVINCES, CITIES_BY_PROVINCE } from "@/lib/cn-regions";
 import type { Property } from "@/types";
 
 const schema = z.object({
@@ -47,8 +48,25 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
 
   const isSubmitting = form.formState.isSubmitting;
 
+  // 监听省份字段变化，自动联动城市选项
+  // 字段名是 district（历史遗留），但实际存的是省份
+  const selectedProvince = form.watch("district");
+  const cityOptions = selectedProvince ? CITIES_BY_PROVINCE[selectedProvince] ?? [] : [];
+
   return (
     <Form {...form}>
+      {/* datalist 给 input 提供下拉建议，但仍允许手填任意值 */}
+      <datalist id="cn-provinces">
+        {PROVINCES.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
+      <datalist id="cn-cities">
+        {cityOptions.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField
@@ -58,7 +76,7 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
               <FormItem className="sm:col-span-2">
                 <FormLabel>房源名称 *</FormLabel>
                 <FormControl>
-                  <Input placeholder="例：朝阳区三里屯A座102" {...field} />
+                  <Input placeholder="例：碧桂园 / 万科城" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -72,7 +90,7 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
               <FormItem className="sm:col-span-2">
                 <FormLabel>详细地址 *</FormLabel>
                 <FormControl>
-                  <Input placeholder="街道、楼栋、门牌号" {...field} />
+                  <Input placeholder="例：A座102 / 3栋1单元202" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -86,7 +104,21 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
               <FormItem>
                 <FormLabel>省</FormLabel>
                 <FormControl>
-                  <Input placeholder="北京市 / 广东省" {...field} />
+                  <Input
+                    list="cn-provinces"
+                    placeholder=""
+                    autoComplete="address-level1"
+                    {...field}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      // 切换省份时清空城市，避免不匹配
+                      const newProvince = e.target.value;
+                      const currentCity = form.getValues("city");
+                      if (currentCity && newProvince && !(CITIES_BY_PROVINCE[newProvince] ?? []).includes(currentCity)) {
+                        form.setValue("city", "");
+                      }
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -100,7 +132,12 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
               <FormItem>
                 <FormLabel>城市</FormLabel>
                 <FormControl>
-                  <Input placeholder="北京 / 深圳" {...field} />
+                  <Input
+                    list="cn-cities"
+                    placeholder=""
+                    autoComplete="address-level2"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -114,7 +151,7 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
               <FormItem>
                 <FormLabel>户型</FormLabel>
                 <FormControl>
-                  <Input placeholder="2室1厅1卫" {...field} />
+                  <Input placeholder="例：2室1厅1卫" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -126,9 +163,21 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
             name="area"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>面积（㎡）</FormLabel>
+                <FormLabel>面积</FormLabel>
                 <FormControl>
-                  <Input type="number" step="0.01" placeholder="60.00" {...field} />
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      placeholder=""
+                      className="pr-10"
+                      {...field}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                      ㎡
+                    </span>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
