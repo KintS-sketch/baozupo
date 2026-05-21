@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,6 +12,24 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PROVINCES, CITIES_BY_PROVINCE } from "@/lib/cn-regions";
 import type { Property } from "@/types";
+
+/** 解析 "2室1厅1卫" → {rooms:2, halls:1, baths:1}（兼容历史数据） */
+function parseLayout(layout: string | null | undefined): {
+  rooms: number;
+  halls: number;
+  baths: number;
+} {
+  const m = (layout ?? "").match(/(\d+)\s*室\s*(\d+)\s*厅\s*(\d+)\s*卫/);
+  return m
+    ? { rooms: +m[1], halls: +m[2], baths: +m[3] }
+    : { rooms: 0, halls: 0, baths: 0 };
+}
+
+function formatLayout(rooms: number, halls: number, baths: number): string {
+  // 全 0 时存空串（"未填写"）；否则拼成标准格式
+  if (!rooms && !halls && !baths) return "";
+  return `${rooms}室${halls}厅${baths}卫`;
+}
 
 const schema = z.object({
   name: z.string().min(1, "请输入房源名称"),
@@ -52,6 +71,16 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
   // 字段名是 district（历史遗留），但实际存的是省份
   const selectedProvince = form.watch("district");
   const cityOptions = selectedProvince ? CITIES_BY_PROVINCE[selectedProvince] ?? [] : [];
+
+  // 户型拆 3 段：用户填数字，提交时合并为"X室X厅X卫"字符串存数据库
+  const [layoutParts, setLayoutParts] = useState(() => parseLayout(defaultValues?.layout));
+
+  const updateLayoutPart = (key: "rooms" | "halls" | "baths", value: number) => {
+    const safe = Math.max(0, Math.min(20, Math.floor(value || 0)));
+    const next = { ...layoutParts, [key]: safe };
+    setLayoutParts(next);
+    form.setValue("layout", formatLayout(next.rooms, next.halls, next.baths));
+  };
 
   return (
     <Form {...form}>
@@ -144,19 +173,42 @@ export function PropertyForm({ defaultValues, onSubmit, onCancel }: PropertyForm
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="layout"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>户型</FormLabel>
-                <FormControl>
-                  <Input placeholder="例：2室1厅1卫" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* 户型：3 个数字框（室/厅/卫），少打字 */}
+          <FormItem>
+            <FormLabel>户型</FormLabel>
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={20}
+                className="w-14 text-center px-2"
+                value={layoutParts.rooms || ""}
+                onChange={(e) => updateLayoutPart("rooms", Number(e.target.value))}
+              />
+              <span className="text-sm text-muted-foreground">室</span>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={20}
+                className="w-14 text-center px-2"
+                value={layoutParts.halls || ""}
+                onChange={(e) => updateLayoutPart("halls", Number(e.target.value))}
+              />
+              <span className="text-sm text-muted-foreground">厅</span>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={20}
+                className="w-14 text-center px-2"
+                value={layoutParts.baths || ""}
+                onChange={(e) => updateLayoutPart("baths", Number(e.target.value))}
+              />
+              <span className="text-sm text-muted-foreground">卫</span>
+            </div>
+          </FormItem>
 
           <FormField
             control={form.control}
