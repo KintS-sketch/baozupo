@@ -19,31 +19,42 @@ interface InviteLinkDialogProps {
   onOpenChange: (open: boolean) => void;
   /** 默认让用户在弹窗里选；指定值时锁定不让选 */
   defaultPurpose?: "tenant_register" | "agent_register";
+  /**
+   * 反馈 #12: 一张链接两种填法 — 发起时不区分 purpose（存为 tenant_register
+   * 作为占位），填表人在公开表单里自己选「我是租客」还是「我是中介」。
+   * 房东这边发链接就一个按钮，体验最简单。
+   */
+  dualRole?: boolean;
 }
 
 /**
  * 一键生成给租客/中介自填的公开链接。
- * 反馈 #9：发起人在弹窗里选「发给租客」还是「发给中介」。
  */
 export function InviteLinkDialog({
   open,
   onOpenChange,
   defaultPurpose = "tenant_register",
+  dualRole = false,
 }: InviteLinkDialogProps) {
   const [creating, setCreating] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [purpose, setPurpose] = useState<"tenant_register" | "agent_register">(defaultPurpose);
 
-  const purposeLabel = purpose === "agent_register" ? "中介" : "租客";
+  const purposeLabel = dualRole ? "对方" : purpose === "agent_register" ? "中介" : "租客";
 
   const handleGenerate = async () => {
     setCreating(true);
     try {
+      // dualRole 模式：purpose 占位 tenant_register，prefilled_data 打 dualRole=true
+      // 公开表单读到这个 flag 后会让填表人选「我是租客 / 我是中介」
+      const body = dualRole
+        ? { purpose: "tenant_register" as const, prefilled_data: { dualRole: true } }
+        : { purpose };
       const res = await fetch("/api/invites/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ purpose }),
+        body: JSON.stringify(body),
       });
       const json = (await res.json()) as { success?: boolean; token?: string; error?: string };
       if (!res.ok || !json.success || !json.token) {
@@ -106,51 +117,49 @@ export function InviteLinkDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LinkIcon className="h-4 w-4 text-primary" />
-            生成{purposeLabel}填表链接
+            {dualRole ? "生成填表链接" : `生成${purposeLabel}填表链接`}
           </DialogTitle>
           <DialogDescription>
-            生成一次性链接发给{purposeLabel}，对方自己填资料就行，省去你手动录入。
-            链接 7 天后失效，提交一次后自动作废。
+            {dualRole
+              ? "生成一次性链接发给租客或中介，对方打开后自己选「我是租客」还是「我是中介」。链接 7 天后失效，提交一次后自动作废。"
+              : `生成一次性链接发给${purposeLabel}，对方自己填资料就行，省去你手动录入。链接 7 天后失效，提交一次后自动作废。`}
           </DialogDescription>
         </DialogHeader>
 
         {!url ? (
           <div className="py-4 space-y-3">
-            {/* 选发给谁 */}
-            <div>
-              <p className="text-xs text-muted-foreground mb-2">发给谁填？</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPurpose("tenant_register")}
-                  className={`flex items-center justify-center gap-1.5 h-10 rounded-lg border text-sm font-medium transition-colors ${
-                    purpose === "tenant_register"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted-foreground"
-                  }`}
-                >
-                  <User className="h-4 w-4" />
-                  租客本人
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPurpose("agent_register")}
-                  className={`flex items-center justify-center gap-1.5 h-10 rounded-lg border text-sm font-medium transition-colors ${
-                    purpose === "agent_register"
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted-foreground"
-                  }`}
-                >
-                  <Briefcase className="h-4 w-4" />
-                  中介代填
-                </button>
+            {/* 选发给谁：dualRole 模式下让填表人自己选，这里隐藏 */}
+            {!dualRole && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">发给谁填？</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPurpose("tenant_register")}
+                    className={`flex items-center justify-center gap-1.5 h-10 rounded-lg border text-sm font-medium transition-colors ${
+                      purpose === "tenant_register"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    <User className="h-4 w-4" />
+                    租客本人
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPurpose("agent_register")}
+                    className={`flex items-center justify-center gap-1.5 h-10 rounded-lg border text-sm font-medium transition-colors ${
+                      purpose === "agent_register"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    <Briefcase className="h-4 w-4" />
+                    中介代填
+                  </button>
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-2">
-                {purpose === "agent_register"
-                  ? "中介代填模式：表单会让中介同时填中介自己 + 租客信息"
-                  : "租客本人填模式：只需填租客自己的基本信息"}
-              </p>
-            </div>
+            )}
 
             <Button
               type="button"

@@ -23,25 +23,24 @@ import { isValidPhone } from "@/lib/format";
 import { toast } from "sonner";
 import type { AiRecognizeIdCardResponse } from "@/types/ai";
 
-// 公开表单：租客本人填 / 中介代填
-// 租客模式只需要租客 5 个字段；中介模式 + 中介自己 2 个字段
+// 18 位身份证号校验
+const ID_CARD_RE = /^\d{17}[\dXx]$/;
+// 微信号校验
+const WECHAT_RE = /^[a-zA-Z][a-zA-Z0-9_-]{5,19}$|^[一-龥_a-zA-Z0-9-]{2,20}$/;
+
+// 公开表单：所有租客字段必填（除备注）。中介模式额外填中介自己。
 const schema = z.object({
-  // 租客信息（两种模式下都填）
-  name: z.string().min(1, "请输入租客姓名"),
-  phone: z.string().refine(isValidPhone, "请输入有效的中国大陆手机号"),
-  id_number: z.string().optional(),
-  emergency_contact_name: z.string().optional(),
-  emergency_contact_phone: z
-    .string()
-    .optional()
-    .refine((v) => !v || isValidPhone(v), "请输入有效的手机号"),
+  // 租客信息
+  name: z.string().min(1, "请填写租客姓名"),
+  phone: z.string().refine(isValidPhone, "请输入正确的 11 位手机号"),
+  id_number: z.string().refine((v) => ID_CARD_RE.test(v.trim()), "请输入完整的 18 位身份证号"),
+  wechat_id: z.string().refine((v) => WECHAT_RE.test(v.trim()), "请输入有效的微信号"),
+  emergency_contact_name: z.string().min(1, "请填写紧急联系人姓名"),
+  emergency_contact_phone: z.string().refine(isValidPhone, "请输入正确的紧急联系人电话"),
   notes: z.string().optional(),
-  // 中介信息（仅 agent_register 模式下展示）
+  // 中介信息（仅中介模式必填）
   agent_name: z.string().optional(),
-  agent_phone: z
-    .string()
-    .optional()
-    .refine((v) => !v || isValidPhone(v), "请输入有效的手机号"),
+  agent_phone: z.string().optional().refine((v) => !v || isValidPhone(v), "请输入正确的手机号"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -86,12 +85,16 @@ export default function InvitePage({
   const [scanning, setScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // dualRole 模式下让填表人自己选角色；非 dualRole 走 invite.purpose
+  const [chosenRole, setChosenRole] = useState<"tenant" | "agent" | null>(null);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",
       phone: "",
       id_number: "",
+      wechat_id: "",
       emergency_contact_name: "",
       emergency_contact_phone: "",
       notes: "",
@@ -180,11 +183,20 @@ export default function InvitePage({
   };
 
   const handleSubmit = async (values: FormValues) => {
+    // 中介模式下手动校验中介姓名（zod 不知道当前 mode，只能在这里补）
+    const role =
+      chosenRole ??
+      (invite?.purpose === "agent_register" ? "agent" : "tenant");
+    if (role === "agent" && !(values.agent_name && values.agent_name.trim())) {
+      toast.error("请填写中介姓名");
+      return;
+    }
     try {
+      const payload = { ...values, chosen_role: role };
       const res = await fetch(`/api/invites/${token}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       const json = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !json.success) {
@@ -241,7 +253,69 @@ export default function InvitePage({
 
   if (!invite) return null;
 
-  const isAgentMode = invite.purpose === "agent_register";
+  // 反馈 #12: dualRole 模式下让填表人在公开页选自己角色
+  const isDualRole = !!(invite.prefilled_data && (invite.prefilled_data as { dualRole?: boolean }).dualRole);
+  // 角色 effective：dualRole 看用户选了什么；非 dualRole 看 invite.purpose
+  const effectiveRole: "tenant" | "agent" | null = isDualRole
+    ? chosenRole
+    : invite.purpose === "agent_register" ? "agent" : "tenant";
+  const isAgentMode = effectiveRole === "agent";
+
+  // dualRole 模式下用户还没选角色 → 先让他选
+  if (isDualRole && !chosenRole) {
+    return (
+      <div className="min-h-screen bg-muted/30 py-6">
+        <div className="max-w-md mx-auto px-4 space-y-4">
+          <div className="text-center space-y-1">
+            <h1 className="text-xl font-bold">你是？</h1>
+            <p className="text-xs text-muted-foreground">房东请你帮忙填一份信息，先告诉我你是哪种身份</p>
+          </div>
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <button
+                type="button"
+                onClick={() => setChosenRole("tenant")}
+                className="w-full rounded-xl border border-border bg-white p-4 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">我是租客本人</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      只填我自己的信息（姓名、手机、身份证、微信号、紧急联系人）
+                    </p>
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChosenRole("agent")}
+                className="w-full rounded-xl border border-border bg-white p-4 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">我是中介代填</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      填中介本人 + 租客信息，房东会自动建中介租约
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </CardContent>
+          </Card>
+          <p className="text-center text-[11px] text-muted-faint">
+            由 养房 Tend 提供 · tendapp.cn
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const purposeLabel = isAgentMode ? "中介代填租客信息" : "租客信息登记";
   const subtitle = isAgentMode
     ? "请填写中介本人 + 即将入住租客的信息"
@@ -253,6 +327,15 @@ export default function InvitePage({
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold">{purposeLabel}</h1>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
+          {isDualRole && (
+            <button
+              type="button"
+              onClick={() => setChosenRole(null)}
+              className="text-[11px] text-primary underline"
+            >
+              不是这个身份？重选
+            </button>
+          )}
         </div>
 
         <Card>
@@ -273,7 +356,7 @@ export default function InvitePage({
                         <FormItem>
                           <FormLabel className="text-xs">中介姓名 *</FormLabel>
                           <FormControl>
-                            <Input placeholder="王经理" {...field} />
+                            <Input {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -286,7 +369,7 @@ export default function InvitePage({
                         <FormItem>
                           <FormLabel className="text-xs">中介电话</FormLabel>
                           <FormControl>
-                            <Input type="tel" placeholder="选填" {...field} />
+                            <Input type="tel" inputMode="numeric" maxLength={11} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -344,7 +427,7 @@ export default function InvitePage({
                     <FormItem>
                       <FormLabel>姓名 *</FormLabel>
                       <FormControl>
-                        <Input placeholder="张三" {...field} />
+                        <Input {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -358,7 +441,7 @@ export default function InvitePage({
                     <FormItem>
                       <FormLabel>手机号 *</FormLabel>
                       <FormControl>
-                        <Input type="tel" placeholder="13800138000" {...field} />
+                        <Input type="tel" inputMode="numeric" maxLength={11} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -370,11 +453,25 @@ export default function InvitePage({
                   name="id_number"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>身份证号</FormLabel>
+                      <FormLabel>身份证号 *</FormLabel>
                       <FormControl>
-                        <Input placeholder="选填，房东核对用" {...field} />
+                        <Input maxLength={18} className="font-mono tracking-wider" {...field} />
                       </FormControl>
                       <FormDescription>仅房东可见，不公开展示</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="wechat_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>微信号 *</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -385,9 +482,9 @@ export default function InvitePage({
                   name="emergency_contact_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>紧急联系人姓名</FormLabel>
+                      <FormLabel>紧急联系人姓名 *</FormLabel>
                       <FormControl>
-                        <Input placeholder="选填" {...field} />
+                        <Input {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -399,9 +496,9 @@ export default function InvitePage({
                   name="emergency_contact_phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>紧急联系人电话</FormLabel>
+                      <FormLabel>紧急联系人电话 *</FormLabel>
                       <FormControl>
-                        <Input type="tel" placeholder="选填" {...field} />
+                        <Input type="tel" inputMode="numeric" maxLength={11} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

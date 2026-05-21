@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink, Users } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink, Users, Link as LinkIcon } from "lucide-react";
+import { InviteLinkDialog } from "@/components/invite-link-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +76,12 @@ export default function LeasesPage() {
   const [viewing, setViewing] = useState<LeaseWithRelations | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | LeaseStatus>("all");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const prefillTenantId = searchParams.get("prefill_tenant");
+  const prefillRentalSource = searchParams.get("rental_source") as "direct" | "agent" | null;
+  const prefillAgentName = searchParams.get("agent_name");
+  const prefillAgentPhone = searchParams.get("agent_phone");
   const [leaseAttachments, setLeaseAttachments] = useState<Array<{ id: string; file_name: string; file_url: string; created_at: string }>>([]);
   const [leaseSignedUrls, setLeaseSignedUrls] = useState<Record<string, string>>({});
   // 当前查看的租约的「交付情况」账单列表
@@ -161,6 +169,15 @@ export default function LeasesPage() {
     if (!userLoading) fetchLeases();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId, userLoading]);
+
+  // 反馈 #12: 从邀请箱采纳跳回来时，url 带 prefill_tenant 参数，自动打开新增租约弹窗
+  useEffect(() => {
+    if (prefillTenantId && !formOpen && !userLoading) {
+      setEditing(null);
+      setFormOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillTenantId, userLoading]);
 
   const handleSubmit = async (values: LeaseFormValues, extras: LeaseFormExtras) => {
     if (!householdId) return;
@@ -387,15 +404,21 @@ export default function LeasesPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl">
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold">租约管理</h1>
           <p className="text-sm text-muted-foreground">共 {leases.length} 份租约</p>
         </div>
-        <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
-          <Plus className="h-4 w-4 mr-1" />
-          新增租约
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" onClick={() => setInviteOpen(true)}>
+            <LinkIcon className="h-4 w-4 mr-1" />
+            邀请填表
+          </Button>
+          <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4 mr-1" />
+            新增租约
+          </Button>
+        </div>
       </div>
 
       <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)} className="mb-4">
@@ -521,8 +544,13 @@ export default function LeasesPage() {
           <LeaseForm
             defaultValues={editing ? {
               ...editing,
-              // 回填主租客的 UUID（不是 name），这样下拉框能正确选中
               tenant_id: editing.lease_tenants?.find((lt) => lt.is_primary)?.tenant?.id ?? "",
+            } : prefillTenantId ? {
+              // 反馈 #12: 邀请箱采纳跳回，预填租客 ID + 直租/中介 + 中介信息
+              tenant_id: prefillTenantId,
+              rental_source: prefillRentalSource ?? "direct",
+              agent_name: prefillAgentName ?? "",
+              agent_phone: prefillAgentPhone ?? "",
             } : undefined}
             onSubmit={handleSubmit}
             onCancel={() => { setFormOpen(false); setEditing(null); }}
@@ -756,6 +784,9 @@ export default function LeasesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 反馈 #12: 邀请填表入口从邀请箱挪到这里 */}
+      <InviteLinkDialog open={inviteOpen} onOpenChange={setInviteOpen} dualRole />
     </div>
   );
 }

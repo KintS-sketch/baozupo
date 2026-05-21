@@ -9,12 +9,15 @@ interface SubmitBody {
   name?: string;
   phone?: string;
   id_number?: string;
+  wechat_id?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   notes?: string;
-  // 中介信息（agent_register 模式下携带）
+  // 中介信息（agent 模式或 dualRole 模式选中介时携带）
   agent_name?: string;
   agent_phone?: string;
+  // dualRole 模式下，填表人自己选的角色: "tenant" | "agent"
+  chosen_role?: string;
 }
 
 // 简单中国大陆手机号校验
@@ -103,12 +106,15 @@ export async function POST(
     name,
     phone,
     id_number: body.id_number?.trim() || null,
+    wechat_id: body.wechat_id?.trim() || null,
     emergency_contact_name: body.emergency_contact_name?.trim() || null,
     emergency_contact_phone: body.emergency_contact_phone?.trim() || null,
     notes: body.notes?.trim() || null,
-    // 中介信息（如果是中介代填的话）
+    // 中介信息（agent / dualRole 模式选中介时）
     agent_name: body.agent_name?.trim() || null,
     agent_phone: body.agent_phone?.trim() || null,
+    // 反馈 #12: 填表人自选角色（dualRole 用），房东采纳时据此决定直租/中介
+    chosen_role: body.chosen_role === "agent" ? "agent" : "tenant",
   };
 
   const { error: updateErr } = await supabase

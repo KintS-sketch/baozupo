@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Loader2,
   Inbox,
@@ -43,16 +44,20 @@ interface SubmittedData {
   name?: string;
   phone?: string;
   id_number?: string;
+  wechat_id?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   notes?: string;
   // 中介模式下，submit 时一并存中介信息（采纳时一起带到租约表单的预填）
   agent_name?: string;
   agent_phone?: string;
+  // 反馈 #12: dualRole 模式下填表人自选的角色
+  chosen_role?: "tenant" | "agent";
 }
 
 export default function InvitesPage() {
   const { householdId, loading: userLoading } = useUser();
+  const router = useRouter();
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -87,7 +92,7 @@ export default function InvitesPage() {
     }
     setAccepting(true);
     try {
-      // 创建租客
+      // 创建租客（含微信号）
       const { data: tenant, error: tErr } = await supabase
         .from("tenants")
         .insert({
@@ -96,6 +101,7 @@ export default function InvitesPage() {
           phone: s.phone,
           id_type: "id_card",
           id_number: s.id_number ?? null,
+          wechat_id: s.wechat_id ?? null,
           emergency_contact_name: s.emergency_contact_name ?? null,
           emergency_contact_phone: s.emergency_contact_phone ?? null,
           notes: s.notes ?? null,
@@ -117,9 +123,21 @@ export default function InvitesPage() {
         })
         .eq("id", invite.id);
 
-      toast.success("已采纳，新租客已加入");
+      // 反馈 #12: 采纳后引导建租约，根据 chosen_role/purpose 决定直租 vs 中介
+      const isAgent =
+        s.chosen_role === "agent" || invite.purpose === "agent_register";
+      toast.success(
+        isAgent
+          ? "已采纳，去租约页建一个【通过中介】的租约吧"
+          : "已采纳，去租约页建一个【直租】的租约吧"
+      );
       setPreviewing(null);
-      fetchInvites();
+      // 跳到租约页，让房东点新增租约（已选择已有租客 = 新建的这个 tenant）
+      router.push(`/leases?prefill_tenant=${tenant.id}&rental_source=${isAgent ? "agent" : "direct"}${
+        isAgent && s.agent_name ? `&agent_name=${encodeURIComponent(s.agent_name)}` : ""
+      }${
+        isAgent && s.agent_phone ? `&agent_phone=${encodeURIComponent(s.agent_phone)}` : ""
+      }`);
     } finally {
       setAccepting(false);
     }

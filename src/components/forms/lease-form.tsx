@@ -183,7 +183,8 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
     resolver: zodResolver(schema),
     defaultValues: {
       property_id: defaultValues?.property_id ?? "",
-      tenant_mode: defaultValues?.id ? "existing" : "new",
+      // 编辑模式（有 id）或 prefill 模式（有 tenant_id）→ 走 existing；新建走 new
+      tenant_mode: defaultValues?.id || defaultValues?.tenant_id ? "existing" : "new",
       tenant_id: defaultValues?.tenant_id ?? "",
       new_tenant_name: "",
       new_tenant_phone: "",
