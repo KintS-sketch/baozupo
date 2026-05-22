@@ -42,8 +42,8 @@ interface TenantContact {
   id_number: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
-  // 关联的生效房源（如有）
-  active_property_name: string | null;
+  // 关联的生效房源（同一租客可能租多套，去重合并后是数组）
+  active_property_names: string[];
 }
 
 interface AgentContact {
@@ -121,33 +121,51 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         if (Array.isArray(p)) return p[0]?.name ?? null;
         return p.name ?? null;
       };
-      const tenantContacts: TenantContact[] = (
-        (tenantsData ?? []) as unknown as TenantRow[]
-      ).map((t) => {
-        const activeLeaseLt = t.lease_tenants?.find((lt) => {
+      // 去重：同一个人在多套房各建租约 → tenants 表里有多条记录。
+      // 按「姓名 + 手机号」归并成一张联系人卡，字段取最全的，房源汇总成数组。
+      const tenantMap = new Map<string, TenantContact>();
+      for (const t of (tenantsData ?? []) as unknown as TenantRow[]) {
+        // 收集这条 tenant 记录关联的所有生效房源
+        const propNames: string[] = [];
+        for (const lt of t.lease_tenants ?? []) {
           const l = lt.lease;
-          if (!l) return false;
-          if (Array.isArray(l)) return l.some((x) => x.status === "active");
-          return l.status === "active";
-        });
-        const leaseInfo = activeLeaseLt?.lease;
-        const property = leaseInfo
-          ? Array.isArray(leaseInfo)
-            ? leaseInfo[0]?.property
-            : leaseInfo.property
-          : null;
-        return {
-          type: "tenant",
-          id: t.id,
-          name: t.name,
-          phone: t.phone,
-          wechat_id: t.wechat_id,
-          id_number: t.id_number,
-          emergency_contact_name: t.emergency_contact_name,
-          emergency_contact_phone: t.emergency_contact_phone,
-          active_property_name: pickPropertyName(property),
-        };
-      });
+          const leases = Array.isArray(l) ? l : l ? [l] : [];
+          for (const lease of leases) {
+            if (lease.status !== "active") continue;
+            const name = pickPropertyName(lease.property);
+            if (name) propNames.push(name);
+          }
+        }
+        const key = `${t.name.trim()}|${t.phone.trim()}`;
+        const existing = tenantMap.get(key);
+        if (existing) {
+          // 合并：字段补缺、房源去重汇总
+          existing.wechat_id = existing.wechat_id || t.wechat_id;
+          existing.id_number = existing.id_number || t.id_number;
+          existing.emergency_contact_name =
+            existing.emergency_contact_name || t.emergency_contact_name;
+          existing.emergency_contact_phone =
+            existing.emergency_contact_phone || t.emergency_contact_phone;
+          for (const p of propNames) {
+            if (!existing.active_property_names.includes(p)) {
+              existing.active_property_names.push(p);
+            }
+          }
+        } else {
+          tenantMap.set(key, {
+            type: "tenant",
+            id: t.id,
+            name: t.name,
+            phone: t.phone,
+            wechat_id: t.wechat_id,
+            id_number: t.id_number,
+            emergency_contact_name: t.emergency_contact_name,
+            emergency_contact_phone: t.emergency_contact_phone,
+            active_property_names: [...new Set(propNames)],
+          });
+        }
+      }
+      const tenantContacts: TenantContact[] = Array.from(tenantMap.values());
 
       type AgentLeaseRow = {
         id: string;
@@ -325,10 +343,10 @@ function ContactCard({
               {isAgent ? "中介" : "租客"}
             </Badge>
           </div>
-          {contact.type === "tenant" && contact.active_property_name && (
+          {contact.type === "tenant" && contact.active_property_names.length > 0 && (
             <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-              <Building2 className="h-3 w-3" />
-              {contact.active_property_name}
+              <Building2 className="h-3 w-3 shrink-0" />
+              <span className="truncate">{contact.active_property_names.join("、")}</span>
             </p>
           )}
           {contact.type === "agent" && (
