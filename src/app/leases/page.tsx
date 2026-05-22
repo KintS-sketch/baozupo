@@ -192,12 +192,17 @@ function LeasesPageInner() {
     if (!householdId) return;
 
     // 把表单字段拆开：lease 表用的 + 仅前端用的（tenant_mode/new_tenant_* / generate_bills）
+    // ⚠️ 所有 new_tenant_* 字段都必须在这里拆掉，否则会混进 leases insert 报
+    // "Could not find the column" 错误
     const {
       tenant_id: pickedTenantId,
       tenant_mode,
       new_tenant_name,
       new_tenant_phone,
       new_tenant_id_number,
+      new_tenant_wechat_id,
+      new_tenant_emergency_name,
+      new_tenant_emergency_phone,
       generate_bills,
       agent_fee,
       ...leaseRest
