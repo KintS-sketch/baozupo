@@ -59,6 +59,9 @@ export function BillPaymentForm({ bill, tenantName, propertyName, onSubmit, onCa
   const isFull = Number(currentAmount) === remaining;
 
   const handleRecognized = (result: AiPaymentRecognitionResult) => {
+    // 只回填金额 / 收款时间 / 收款方式；
+    // 付款方/收款方人名不自动写进备注（用户反馈：付款人常是代付的家人，
+    // 自动塞名字反而干扰），备注留空让房东自己填。
     if (result.amount > 0) form.setValue("amount", result.amount, { shouldValidate: true });
     if (result.paid_at) {
       const dt = new Date(result.paid_at);
@@ -68,14 +71,6 @@ export function BillPaymentForm({ bill, tenantName, propertyName, onSubmit, onCa
     }
     if (result.method && result.method !== "other") {
       form.setValue("method", result.method, { shouldValidate: true });
-    }
-    const fragments: string[] = [];
-    if (result.from_name) fragments.push(`付款方：${result.from_name}`);
-    if (result.to_name) fragments.push(`收款方：${result.to_name}`);
-    if (fragments.length > 0) {
-      const existing = form.getValues("notes");
-      const aiNote = fragments.join(" · ");
-      form.setValue("notes", existing ? `${existing}\n${aiNote}` : aiNote, { shouldValidate: true });
     }
   };
 
