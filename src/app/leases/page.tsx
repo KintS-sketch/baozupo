@@ -224,8 +224,17 @@ function LeasesPageInner() {
     };
 
     if (editing) {
+      // 影响账单的字段是否变了（租期/租金/账单模式/收租日）
+      const billingChanged =
+        editing.start_date !== values.start_date ||
+        editing.end_date !== values.end_date ||
+        Number(editing.monthly_rent) !== Number(values.monthly_rent) ||
+        editing.billing_mode !== values.billing_mode ||
+        Number(editing.rent_due_day) !== Number(values.rent_due_day);
+
       const { error } = await supabase.from("leases").update(payload).eq("id", editing.id);
       if (error) { toast.error("保存失败"); return; }
+
       // 编辑时如果换了主租客，更新 lease_tenants
       if (pickedTenantId) {
         const currentPrimary = editing.lease_tenants?.find((lt) => lt.is_primary)?.tenant?.id;
@@ -238,7 +247,55 @@ function LeasesPageInner() {
           });
         }
       }
-      toast.success("租约已更新");
+
+      // 租期/租金改了 → 账单要跟着重算，否则会留下旧日期的错误账单
+      let rebuiltMsg = "";
+      if (billingChanged) {
+        const { data: oldBills } = await supabase
+          .from("bills")
+          .select("id, paid_amount")
+          .eq("lease_id", editing.id);
+        const hasPaid = (oldBills ?? []).some((b) => Number(b.paid_amount ?? 0) > 0);
+
+        if (hasPaid) {
+          // 有账单已收过钱，不敢自动删，提示用户手动核对
+          toast.warning("租期/租金已改，但已有账单收过款，账单未自动重算，请手动核对");
+        } else {
+          // 没有任何收款 → 删掉旧账单，按新参数重新生成
+          if (oldBills && oldBills.length > 0) {
+            await supabase.from("bills").delete().eq("lease_id", editing.id);
+          }
+          const periods = generateBillPeriods(
+            new Date(values.start_date),
+            new Date(values.end_date),
+            values.monthly_rent,
+            values.billing_mode,
+            values.rent_due_day
+          );
+          const today = new Date();
+          const billRows = periods.map((p) => ({
+            lease_id: editing.id,
+            period_start: format(p.periodStart, "yyyy-MM-dd"),
+            period_end: format(p.periodEnd, "yyyy-MM-dd"),
+            days_in_period: p.daysInPeriod,
+            ratio: p.ratio,
+            due_date: format(p.dueDate, "yyyy-MM-dd"),
+            rent_amount: p.rentAmount,
+            utility_amount: 0,
+            other_amount: 0,
+            total_amount: p.rentAmount,
+            paid_amount: 0,
+            status: calculateBillStatus(p.rentAmount, 0, p.dueDate, today),
+          }));
+          const { error: billsErr } = await supabase.from("bills").insert(billRows);
+          if (billsErr) {
+            toast.error("租约已更新，但账单重算失败：" + billsErr.message);
+          } else {
+            rebuiltMsg = `，账单已重算为 ${billRows.length} 期`;
+          }
+        }
+      }
+      toast.success("租约已更新" + rebuiltMsg);
     } else {
       // 新增模式：如果选了"新增租客"，先 create tenant 拿 id
       let tenant_id = pickedTenantId ?? "";
