@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { isValidPhone } from "@/lib/format";
+import { addMonths, format } from "date-fns";
 import { toast } from "sonner";
 import type { Lease, Property, Tenant } from "@/types";
 import type { AiRecognizeIdCardResponse } from "@/types/ai";
@@ -23,10 +24,11 @@ const ID_CARD_RE = /^\d{17}[\dXx]$/;
 const WECHAT_RE = /^[a-zA-Z][a-zA-Z0-9_-]{5,19}$|^[一-龥_a-zA-Z0-9-]{2,20}$/;
 
 const CONTRACT_MAX_BYTES = 10 * 1024 * 1024;
-const CONTRACT_ACCEPT = "image/*,application/pdf";
+const CONTRACT_MAX_COUNT = 10; // 合同最多传 10 个文件（拍照可能多张）
 
 export interface LeaseFormExtras {
-  contractFile: File | null;
+  // 反馈：合同支持多个文件（文件 or 多张照片）
+  contractFiles: File[];
   // 新建租客模式下，前端 handler 需要先 create tenant 再 create lease
   newTenant: NewTenantPayload | null;
 }
@@ -153,21 +155,35 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   const { householdId } = useUser();
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [contractFile, setContractFile] = useState<File | null>(null);
-  const contractInputRef = useRef<HTMLInputElement>(null);
+  // 反馈：合同改成多文件 — docInputRef 选 PDF/文档，photoInputRef 选图片
+  const [contractFiles, setContractFiles] = useState<File[]>([]);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
   const isEditing = !!defaultValues?.id;
 
-  const handlePickContract = () => contractInputRef.current?.click();
-
   const handleContractChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > CONTRACT_MAX_BYTES) {
-      alert(`合同文件不能超过 10MB（当前 ${(file.size / 1024 / 1024).toFixed(1)}MB）`);
-      return;
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
+    const tooBig = picked.find((f) => f.size > CONTRACT_MAX_BYTES);
+    if (tooBig) {
+      toast.error(`「${tooBig.name}」超过 10MB，请压缩后再传`);
     }
-    setContractFile(file);
+    const valid = picked.filter((f) => f.size <= CONTRACT_MAX_BYTES);
+    setContractFiles((prev) => {
+      const merged = [...prev, ...valid];
+      if (merged.length > CONTRACT_MAX_COUNT) {
+        toast.warning(`合同最多 ${CONTRACT_MAX_COUNT} 个文件，多余的已忽略`);
+        return merged.slice(0, CONTRACT_MAX_COUNT);
+      }
+      return merged;
+    });
+    // 重置 input，使重复选同一个文件也能触发
+    e.target.value = "";
+  };
+
+  const removeContractFile = (idx: number) => {
+    setContractFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // AI 拍身份证识别相关
@@ -189,8 +205,9 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
       new_tenant_emergency_phone: "",
       start_date: defaultValues?.start_date ?? "",
       end_date: defaultValues?.end_date ?? "",
-      monthly_rent: defaultValues?.monthly_rent ?? (0 as unknown as number),
-      deposit: defaultValues?.deposit ?? 0,
+      // 默认值用空串而不是 0：否则输入框里 0 占位，打 50 会变 "050"
+      monthly_rent: defaultValues?.monthly_rent ?? ("" as unknown as number),
+      deposit: defaultValues?.deposit ?? ("" as unknown as number),
       payment_cycle: defaultValues?.payment_cycle ?? "monthly",
       rent_due_day: defaultValues?.rent_due_day ?? 1,
       billing_mode: defaultValues?.billing_mode ?? "natural_month",
@@ -219,6 +236,23 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   // 让 watch 触发重渲染
   form.watch(["new_tenant_name", "new_tenant_phone", "new_tenant_id_number",
     "new_tenant_wechat_id", "new_tenant_emergency_name", "new_tenant_emergency_phone"]);
+
+  // 反馈：租期快捷选项 — 选了半年/一年/两年，填起租日就自动算结束日
+  // 编辑已有租约时默认 custom，保留原 end_date 不被覆盖
+  type LeaseTerm = "6m" | "1y" | "2y" | "custom";
+  const [leaseTerm, setLeaseTerm] = useState<LeaseTerm>(
+    defaultValues?.id ? "custom" : "1y"
+  );
+  const startDate = form.watch("start_date");
+  useEffect(() => {
+    if (leaseTerm === "custom" || !startDate) return;
+    const months = leaseTerm === "6m" ? 6 : leaseTerm === "1y" ? 12 : 24;
+    const end = addMonths(new Date(startDate), months);
+    if (!isNaN(end.getTime())) {
+      form.setValue("end_date", format(end, "yyyy-MM-dd"), { shouldValidate: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, leaseTerm]);
 
   const handleIdCardFile = async (file: File) => {
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -283,7 +317,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
             emergency_contact_phone: values.new_tenant_emergency_phone!.trim(),
           }
         : null;
-    return onSubmit(values, { contractFile, newTenant });
+    return onSubmit(values, { contractFiles, newTenant });
   };
 
   useEffect(() => {
@@ -548,13 +582,53 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
             )}
           />
 
+          {/* 租期快捷选项：选了之后填起租日自动算结束日 */}
+          <FormItem className="sm:col-span-2">
+            <FormLabel>租期</FormLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { v: "6m" as const, label: "半年" },
+                { v: "1y" as const, label: "一年" },
+                { v: "2y" as const, label: "两年" },
+                { v: "custom" as const, label: "自定义" },
+              ]).map((t) => (
+                <button
+                  key={t.v}
+                  type="button"
+                  onClick={() => setLeaseTerm(t.v)}
+                  className={`px-3 h-8 rounded-lg text-xs font-medium border transition-colors ${
+                    leaseTerm === t.v
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-muted-foreground"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </FormItem>
+
           <FormField
             control={form.control}
             name="end_date"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>结束日期 *</FormLabel>
-                <FormControl><Input type="date" {...field} /></FormControl>
+                <FormLabel>
+                  结束日期 *
+                  {leaseTerm !== "custom" && (
+                    <span className="text-[11px] font-normal text-muted-foreground ml-1">
+                      （按租期自动算，可选「自定义」手填）
+                    </span>
+                  )}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    {...field}
+                    readOnly={leaseTerm !== "custom"}
+                    className={leaseTerm !== "custom" ? "bg-muted/50 text-muted-foreground" : ""}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -752,56 +826,90 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
           <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Paperclip className="h-3.5 w-3.5" />
-              <span>合同附件（可选）</span>
+              <span>合同附件（可选，最多 {CONTRACT_MAX_COUNT} 个）</span>
               {!tenantFieldsAllFilled && (
                 <span className="text-[10px] text-warning ml-auto">
                   填完租客信息才能上传
                 </span>
               )}
             </div>
+
+            {/* 文档选择 input — PDF / Word 等 */}
             <input
-              ref={contractInputRef}
+              ref={docInputRef}
               type="file"
-              accept={CONTRACT_ACCEPT}
+              accept="application/pdf,.doc,.docx"
+              multiple
               className="hidden"
               onChange={handleContractChange}
             />
-            {contractFile ? (
-              <div className="flex items-center gap-2 rounded-md bg-white border p-2">
-                <Paperclip className="h-3.5 w-3.5 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{contractFile.name}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {(contractFile.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
+            {/* 图片选择 input — 多张照片 */}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleContractChange}
+            />
+
+            {/* 已选文件列表 */}
+            {contractFiles.length > 0 && (
+              <div className="space-y-1.5">
+                {contractFiles.map((f, idx) => (
+                  <div key={idx} className="flex items-center gap-2 rounded-md bg-white border p-2">
+                    <Paperclip className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{f.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {(f.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 shrink-0"
+                      onClick={() => removeContractFile(idx)}
+                      disabled={isSubmitting}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 两个上传入口：文件 / 图片 */}
+            {contractFiles.length < CONTRACT_MAX_COUNT && (
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 shrink-0"
-                  onClick={() => {
-                    setContractFile(null);
-                    if (contractInputRef.current) contractInputRef.current.value = "";
-                  }}
-                  disabled={isSubmitting}
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => docInputRef.current?.click()}
+                  disabled={isSubmitting || !tenantFieldsAllFilled}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <Upload className="mr-1 h-3.5 w-3.5" />
+                  上传文件
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={isSubmitting || !tenantFieldsAllFilled}
+                >
+                  <Upload className="mr-1 h-3.5 w-3.5" />
+                  上传照片
                 </Button>
               </div>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="w-full"
-                onClick={handlePickContract}
-                disabled={isSubmitting || !tenantFieldsAllFilled}
-              >
-                <Upload className="mr-1 h-3.5 w-3.5" />
-                选择合同文件（PDF / 图片，≤10MB）
-              </Button>
             )}
+            <p className="text-[11px] text-muted-foreground">
+              文件支持 PDF / Word；照片可一次选多张，单个 ≤10MB
+            </p>
           </div>
         )}
 

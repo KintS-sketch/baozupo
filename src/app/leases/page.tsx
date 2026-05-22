@@ -277,32 +277,32 @@ function LeasesPageInner() {
       // 更新房源状态为出租中
       await supabase.from("properties").update({ status: "rented" }).eq("id", values.property_id);
 
-      // 上传合同附件（如有）
-      let contractUploaded = false;
-      if (extras.contractFile) {
-        const file = extras.contractFile;
+      // 上传合同附件（支持多个文件 / 多张照片）
+      let contractUploaded = 0;
+      for (let i = 0; i < extras.contractFiles.length; i++) {
+        const file = extras.contractFiles[i];
         const safeName = file.name.replace(/[^\w.\-一-龥]/g, "_");
-        const objectPath = `${householdId}/${newLease.id}/${Date.now()}-${safeName}`;
+        const objectPath = `${householdId}/${newLease.id}/${Date.now()}-${i}-${safeName}`;
         const { error: upErr } = await supabase.storage
           .from("contracts")
           .upload(objectPath, file, { upsert: false, contentType: file.type });
         if (upErr) {
-          toast.warning(`租约已创建，但合同上传失败：${upErr.message}`);
+          toast.warning(`「${file.name}」上传失败：${upErr.message}`);
+          continue;
+        }
+        const { error: insertErr } = await supabase.from("attachments").insert({
+          household_id: householdId,
+          entity_type: "lease",
+          entity_id: newLease.id,
+          file_name: file.name,
+          file_url: objectPath,
+          file_size: file.size,
+          mime_type: file.type || null,
+        });
+        if (insertErr) {
+          toast.warning(`「${file.name}」已上传但记录失败：${insertErr.message}`);
         } else {
-          const { error: insertErr } = await supabase.from("attachments").insert({
-            household_id: householdId,
-            entity_type: "lease",
-            entity_id: newLease.id,
-            file_name: file.name,
-            file_url: objectPath,
-            file_size: file.size,
-            mime_type: file.type || null,
-          });
-          if (insertErr) {
-            toast.warning(`合同已上传但记录失败：${insertErr.message}`);
-          } else {
-            contractUploaded = true;
-          }
+          contractUploaded++;
         }
       }
 
@@ -341,7 +341,7 @@ function LeasesPageInner() {
 
       const parts = ["租约已创建"];
       if (billsCreated > 0) parts.push(`生成 ${billsCreated} 期账单`);
-      if (contractUploaded) parts.push("合同已上传");
+      if (contractUploaded > 0) parts.push(`合同已传 ${contractUploaded} 个`);
       toast.success(parts.join("，"));
     }
 
