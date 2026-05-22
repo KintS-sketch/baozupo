@@ -181,20 +181,33 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     // 4. remountKey +1 强制所有 client 子页面 unmount + remount，
     //    丢弃 freeze 中残留的 pending fetch，重新跑 useEffect 拉数据
     // 用 30 秒限频避免频繁 alt-tab 拖慢应用
+    //
+    // ⚠️ 重要：第 3、4 步会摧毁正在填的表单。iOS 用户「填租约填一半 →
+    // 切出去查个电话 → 切回来」是高频动作，如果这时 remount，弹窗会关掉、
+    // 填的内容全没。所以检测到页面有打开的弹窗时，只做 1+2，跳过 3+4。
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
       const now = Date.now();
       if (now - lastVisRefreshRef.current < 30_000) return;
       lastVisRefreshRef.current = now;
 
-      // 1. 释放可能卡住的 loading 状态
+      // 1. 释放可能卡住的 loading 状态（这步不破坏表单，照常做）
       setLoading((prev) => {
         if (prev) console.warn("[UserCtx] released stuck loading on visibility");
         return false;
       });
 
-      // 2. 静默 refresh session（token 过期时会自动续期）
+      // 2. 静默 refresh session（token 过期时会自动续期，不破坏表单）
       supabase.auth.getSession().catch(() => {});
+
+      // 有弹窗打开（用户正在填表单）→ 跳过 refresh + remount，保住填到一半的内容
+      const hasOpenDialog = document.querySelector(
+        '[role="dialog"],[role="alertdialog"]'
+      );
+      if (hasOpenDialog) {
+        console.warn("[UserCtx] dialog open, skip refresh+remount to keep form");
+        return;
+      }
 
       // 3. 触发 Next.js Server Components 重新 fetch
       router.refresh();

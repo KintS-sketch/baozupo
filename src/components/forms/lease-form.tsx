@@ -110,10 +110,11 @@ const schema = z.object({
     },
     { message: "请输入完整的 18 位身份证号", path: ["new_tenant_id_number"] }
   )
+  // 微信号选填；填了才校验格式
   .refine(
     (data) => {
-      if (data.tenant_mode !== "new") return true;
-      return !!(data.new_tenant_wechat_id && WECHAT_RE.test(data.new_tenant_wechat_id.trim()));
+      if (data.tenant_mode !== "new" || !data.new_tenant_wechat_id) return true;
+      return WECHAT_RE.test(data.new_tenant_wechat_id.trim());
     },
     { message: "请输入有效的微信号", path: ["new_tenant_wechat_id"] }
   )
@@ -205,15 +206,14 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   const tenantMode = form.watch("tenant_mode");
   const rentalSource = form.watch("rental_source");
 
-  // 新增租客模式下，必填字段填完才允许选合同（紧急联系人选填，不计入）
+  // 新增租客模式下，必填字段填完才允许选合同（微信号 / 紧急联系人都选填，不计入）
   const tenantFieldsAllFilled = (() => {
     if (tenantMode !== "new") return true;
     const v = form.getValues();
     return !!(
       v.new_tenant_name?.trim() &&
       v.new_tenant_phone && isValidPhone(v.new_tenant_phone) &&
-      v.new_tenant_id_number && ID_CARD_RE.test(v.new_tenant_id_number.trim()) &&
-      v.new_tenant_wechat_id?.trim()
+      v.new_tenant_id_number && ID_CARD_RE.test(v.new_tenant_id_number.trim())
     );
   });
   // 让 watch 触发重渲染
@@ -463,7 +463,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
                     name="new_tenant_wechat_id"
                     render={({ field }) => (
                       <FormItem className="sm:col-span-2">
-                        <FormLabel>微信号 *</FormLabel>
+                        <FormLabel>微信号（选填）</FormLabel>
                         <FormControl><Input {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>

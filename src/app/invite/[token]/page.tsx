@@ -34,7 +34,11 @@ const schema = z.object({
   name: z.string().min(1, "请填写租客姓名"),
   phone: z.string().refine(isValidPhone, "请输入正确的 11 位手机号"),
   id_number: z.string().refine((v) => ID_CARD_RE.test(v.trim()), "请输入完整的 18 位身份证号"),
-  wechat_id: z.string().refine((v) => WECHAT_RE.test(v.trim()), "请输入有效的微信号"),
+  // 微信号选填；填了才校验格式
+  wechat_id: z
+    .string()
+    .optional()
+    .refine((v) => !v || WECHAT_RE.test(v.trim()), "请输入有效的微信号"),
   // 紧急联系人选填；电话填了才校验格式
   emergency_contact_name: z.string().optional(),
   emergency_contact_phone: z
@@ -472,7 +476,7 @@ export default function InvitePage({
                   name="wechat_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>微信号 *</FormLabel>
+                      <FormLabel>微信号（选填）</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
