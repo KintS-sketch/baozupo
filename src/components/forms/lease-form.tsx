@@ -117,17 +117,11 @@ const schema = z.object({
     },
     { message: "请输入有效的微信号", path: ["new_tenant_wechat_id"] }
   )
+  // 紧急联系人姓名选填；电话选填，但填了要校验格式
   .refine(
     (data) => {
-      if (data.tenant_mode !== "new") return true;
-      return !!(data.new_tenant_emergency_name && data.new_tenant_emergency_name.trim().length > 0);
-    },
-    { message: "请填写紧急联系人姓名", path: ["new_tenant_emergency_name"] }
-  )
-  .refine(
-    (data) => {
-      if (data.tenant_mode !== "new") return true;
-      return !!(data.new_tenant_emergency_phone && isValidPhone(data.new_tenant_emergency_phone));
+      if (data.tenant_mode !== "new" || !data.new_tenant_emergency_phone) return true;
+      return isValidPhone(data.new_tenant_emergency_phone);
     },
     { message: "请输入正确的紧急联系人手机号", path: ["new_tenant_emergency_phone"] }
   )
@@ -211,7 +205,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   const tenantMode = form.watch("tenant_mode");
   const rentalSource = form.watch("rental_source");
 
-  // 新增租客模式下，所有租客字段都填完了才允许选合同
+  // 新增租客模式下，必填字段填完才允许选合同（紧急联系人选填，不计入）
   const tenantFieldsAllFilled = (() => {
     if (tenantMode !== "new") return true;
     const v = form.getValues();
@@ -219,9 +213,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
       v.new_tenant_name?.trim() &&
       v.new_tenant_phone && isValidPhone(v.new_tenant_phone) &&
       v.new_tenant_id_number && ID_CARD_RE.test(v.new_tenant_id_number.trim()) &&
-      v.new_tenant_wechat_id?.trim() &&
-      v.new_tenant_emergency_name?.trim() &&
-      v.new_tenant_emergency_phone && isValidPhone(v.new_tenant_emergency_phone)
+      v.new_tenant_wechat_id?.trim()
     );
   });
   // 让 watch 触发重渲染
@@ -298,7 +290,8 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
     if (!householdId) return;
     const loadOptions = async () => {
       const [{ data: propsData }, { data: tenantsData }] = await Promise.all([
-        supabase.from("properties").select("id, name").eq("household_id", householdId).is("deleted_at", null).order("name"),
+        // 反馈：选房源要能看到地址，区分同名房源（比如两个"碧桂园"）
+        supabase.from("properties").select("id, name, address").eq("household_id", householdId).is("deleted_at", null).order("name"),
         supabase.from("tenants").select("id, name").eq("household_id", householdId).is("deleted_at", null).order("name"),
       ]);
       setProperties((propsData ?? []) as Property[]);
@@ -327,7 +320,16 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl><SelectTrigger><SelectValue placeholder="选择房源" /></SelectTrigger></FormControl>
                 <SelectContent>
-                  {properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  {properties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="flex flex-col">
+                        <span className="font-medium">{p.name}</span>
+                        {p.address && (
+                          <span className="text-xs text-muted-foreground">{p.address}</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -386,11 +388,11 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
                     <span className="text-sm font-medium">拍身份证一键填</span>
                     <span className="text-[11px] text-muted-foreground">自动识别姓名+证件号</span>
                   </div>
+                  {/* 不加 capture，让浏览器弹「拍照 / 从相册选」菜单 */}
                   <input
                     ref={idCardInputRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -472,7 +474,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
                     name="new_tenant_emergency_name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>紧急联系人 *</FormLabel>
+                        <FormLabel>紧急联系人（选填）</FormLabel>
                         <FormControl><Input {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -483,7 +485,7 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
                     name="new_tenant_emergency_phone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>紧急联系人电话 *</FormLabel>
+                        <FormLabel>紧急联系人电话（选填）</FormLabel>
                         <FormControl><Input type="tel" inputMode="numeric" maxLength={11} {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>

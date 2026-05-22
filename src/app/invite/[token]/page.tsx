@@ -35,8 +35,12 @@ const schema = z.object({
   phone: z.string().refine(isValidPhone, "请输入正确的 11 位手机号"),
   id_number: z.string().refine((v) => ID_CARD_RE.test(v.trim()), "请输入完整的 18 位身份证号"),
   wechat_id: z.string().refine((v) => WECHAT_RE.test(v.trim()), "请输入有效的微信号"),
-  emergency_contact_name: z.string().min(1, "请填写紧急联系人姓名"),
-  emergency_contact_phone: z.string().refine(isValidPhone, "请输入正确的紧急联系人电话"),
+  // 紧急联系人选填；电话填了才校验格式
+  emergency_contact_name: z.string().optional(),
+  emergency_contact_phone: z
+    .string()
+    .optional()
+    .refine((v) => !v || isValidPhone(v), "请输入正确的紧急联系人电话"),
   notes: z.string().optional(),
   // 中介信息（仅中介模式必填）
   agent_name: z.string().optional(),
@@ -393,11 +397,11 @@ export default function InvitePage({
                     <span className="font-medium">拍身份证，自动填写</span>
                     <span className="text-xs text-muted-foreground">省去手动输入</span>
                   </div>
+                  {/* 不加 capture，让浏览器弹「拍照 / 从相册选」菜单 */}
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -482,7 +486,7 @@ export default function InvitePage({
                   name="emergency_contact_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>紧急联系人姓名 *</FormLabel>
+                      <FormLabel>紧急联系人姓名（选填）</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -496,7 +500,7 @@ export default function InvitePage({
                   name="emergency_contact_phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>紧急联系人电话 *</FormLabel>
+                      <FormLabel>紧急联系人电话（选填）</FormLabel>
                       <FormControl>
                         <Input type="tel" inputMode="numeric" maxLength={11} {...field} />
                       </FormControl>
