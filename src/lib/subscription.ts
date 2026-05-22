@@ -89,10 +89,14 @@ export const PRICING_TIERS: PricingTier[] = [
 
 /**
  * 是否为有效的 Pro 用户
- * - plan = 'pro'
- * - 且 expires_at 为 null 或 > now
+ *
+ * ⚠️ 种子轮临时：全员视为 Pro，解除房源数量等所有限制，方便测试用户跑流程。
+ * 正式收费时，把 SEED_ALL_PRO 改成 false，恢复真实判断（plan=pro 且未过期）。
  */
+const SEED_ALL_PRO = true; // ← 种子轮全开开关，正式收费改 false
+
 export function isProActive(sub: Subscription | null): boolean {
+  if (SEED_ALL_PRO) return true;
   if (!sub || sub.plan !== "pro") return false;
   if (!sub.expiresAt) return true; // 永久
   return new Date(sub.expiresAt).getTime() > Date.now();

@@ -64,6 +64,9 @@ type LeaseWithRelations = Lease & {
     };
   }>;
   attachment_count?: number;
+  // 合同附件按类型拆分：图片 vs 文档，列表条文案区分「张图片 / 份文件」
+  attachment_images?: number;
+  attachment_docs?: number;
 };
 
 // Next 15 强制要求用 useSearchParams 的客户端组件包在 Suspense 里
@@ -152,21 +155,28 @@ function LeasesPageInner() {
     }
     const leasesList = (data ?? []) as LeaseWithRelations[];
 
-    // 同步拉每个 lease 的合同附件数量（单次 query 后前端 group）
+    // 同步拉每个 lease 的合同附件（带 mime_type，前端 group 出图片/文档数量）
     if (leasesList.length > 0) {
       const leaseIds = leasesList.map((l) => l.id);
       const { data: attData } = await supabase
         .from("attachments")
-        .select("entity_id")
+        .select("entity_id, mime_type")
         .eq("household_id", householdId)
         .eq("entity_type", "lease")
         .in("entity_id", leaseIds);
-      const counts = new Map<string, number>();
-      for (const a of (attData ?? []) as Array<{ entity_id: string }>) {
-        counts.set(a.entity_id, (counts.get(a.entity_id) ?? 0) + 1);
+      const imgCounts = new Map<string, number>();
+      const docCounts = new Map<string, number>();
+      for (const a of (attData ?? []) as Array<{ entity_id: string; mime_type: string | null }>) {
+        const isImg = (a.mime_type ?? "").startsWith("image/");
+        const m = isImg ? imgCounts : docCounts;
+        m.set(a.entity_id, (m.get(a.entity_id) ?? 0) + 1);
       }
       for (const lease of leasesList) {
-        lease.attachment_count = counts.get(lease.id) ?? 0;
+        const img = imgCounts.get(lease.id) ?? 0;
+        const doc = docCounts.get(lease.id) ?? 0;
+        lease.attachment_images = img;
+        lease.attachment_docs = doc;
+        lease.attachment_count = img + doc;
       }
     }
 
@@ -519,6 +529,13 @@ function LeasesPageInner() {
         <div className="space-y-3">
           {filtered.map((lease) => {
             const attCount = lease.attachment_count ?? 0;
+            const attImages = lease.attachment_images ?? 0;
+            const attDocs = lease.attachment_docs ?? 0;
+            // 文案：图片说「N 张图片」、文档说「N 份文件」、混合都列
+            const attLabel = [
+              attImages > 0 ? `${attImages} 张图片` : "",
+              attDocs > 0 ? `${attDocs} 份文件` : "",
+            ].filter(Boolean).join(" + ");
             return (
               <Card
                 key={lease.id}
@@ -590,7 +607,7 @@ function LeasesPageInner() {
                     <Paperclip className={`h-3.5 w-3.5 ${attCount > 0 ? "text-primary" : "text-muted-foreground"}`} />
                     {attCount > 0 ? (
                       <span>
-                        合同 · 已上传 <strong className="text-primary">{attCount}</strong> 份
+                        合同 · 已上传 <strong className="text-primary">{attLabel}</strong>
                       </span>
                     ) : (
                       <span className="text-muted-foreground">暂无合同附件</span>
@@ -856,8 +873,8 @@ function LeasesPageInner() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 反馈 #12: 邀请填表入口从邀请箱挪到这里 */}
-      <InviteLinkDialog open={inviteOpen} onOpenChange={setInviteOpen} dualRole />
+      {/* 邀请填表：房东自己选生成给租客还是给中介 */}
+      <InviteLinkDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   );
 }

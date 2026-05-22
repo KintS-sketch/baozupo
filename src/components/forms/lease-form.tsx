@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { isValidPhone } from "@/lib/format";
-import { addMonths, format } from "date-fns";
+import { addMonths, subDays, format } from "date-fns";
 import { toast } from "sonner";
 import type { Lease, Property, Tenant } from "@/types";
 import type { AiRecognizeIdCardResponse } from "@/types/ai";
@@ -247,7 +247,8 @@ export function LeaseForm({ defaultValues, onSubmit, onCancel }: LeaseFormProps)
   useEffect(() => {
     if (leaseTerm === "custom" || !startDate) return;
     const months = leaseTerm === "6m" ? 6 : leaseTerm === "1y" ? 12 : 24;
-    const end = addMonths(new Date(startDate), months);
+    // 租期到「起租日 + N 个月 - 1 天」：5/1 起租满一年 → 次年 4/30 结束
+    const end = subDays(addMonths(new Date(startDate), months), 1);
     if (!isNaN(end.getTime())) {
       form.setValue("end_date", format(end, "yyyy-MM-dd"), { shouldValidate: true });
     }
