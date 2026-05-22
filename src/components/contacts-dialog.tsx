@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Loader2,
   Copy,
@@ -11,6 +11,7 @@ import {
   Building2,
   Search,
   Users,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -18,6 +19,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +47,8 @@ interface ContactsDialogProps {
 interface TenantContact {
   type: "tenant";
   id: string;
+  // 去重合并后，这个人对应的所有 tenants 表记录 id（删除时一并软删）
+  tenant_ids: string[];
   name: string;
   phone: string;
   wechat_id: string | null;
@@ -44,6 +57,8 @@ interface TenantContact {
   emergency_contact_phone: string | null;
   // 关联的生效房源（同一租客可能租多套，去重合并后是数组）
   active_property_names: string[];
+  // 是否还有生效中的租约 —— 有则不允许删除
+  has_active_lease: boolean;
 }
 
 interface AgentContact {
@@ -64,13 +79,15 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
   const [tab, setTab] = useState<"all" | "tenant" | "agent">("all");
   const [search, setSearch] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // 删除租客确认弹窗
+  const [deletingTenant, setDeletingTenant] = useState<TenantContact | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const supabase = createClient();
 
-  useEffect(() => {
-    if (!open || !householdId) return;
-    let cancelled = false;
-    (async () => {
+  const loadContacts = useCallback(async () => {
+    if (!householdId) return;
+    {
       setLoading(true);
       // 拉所有租客 + 关联当前活跃租约（房源带 address，显示详细房号）
       const { data: tenantsData } = await supabase
@@ -93,8 +110,6 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         .eq("rental_source", "agent")
         .is("deleted_at", null)
         .not("agent_name", "is", null);
-
-      if (cancelled) return;
 
       // supabase-js 把 1:1 关联返回成数组（即便只有 1 条），unknown 强转兼容
       type PropertyRef = { name: string; address: string | null };
@@ -128,13 +143,15 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
       // 按「姓名 + 手机号」归并成一张联系人卡，字段取最全的，房源汇总成数组。
       const tenantMap = new Map<string, TenantContact>();
       for (const t of (tenantsData ?? []) as unknown as TenantRow[]) {
-        // 收集这条 tenant 记录关联的所有生效房源
+        // 收集这条 tenant 记录关联的生效房源 + 判断有没有生效中的租约
         const propNames: string[] = [];
+        let thisHasActive = false;
         for (const lt of t.lease_tenants ?? []) {
           const l = lt.lease;
           const leases = Array.isArray(l) ? l : l ? [l] : [];
           for (const lease of leases) {
             if (lease.status !== "active") continue;
+            thisHasActive = true;
             const name = pickPropertyName(lease.property);
             if (name) propNames.push(name);
           }
@@ -142,7 +159,9 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         const key = `${t.name.trim()}|${t.phone.trim()}`;
         const existing = tenantMap.get(key);
         if (existing) {
-          // 合并：字段补缺、房源去重汇总
+          // 合并：字段补缺、房源去重汇总、记录 id 累加、生效租约状态 OR
+          existing.tenant_ids.push(t.id);
+          existing.has_active_lease = existing.has_active_lease || thisHasActive;
           existing.wechat_id = existing.wechat_id || t.wechat_id;
           existing.id_number = existing.id_number || t.id_number;
           existing.emergency_contact_name =
@@ -158,6 +177,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
           tenantMap.set(key, {
             type: "tenant",
             id: t.id,
+            tenant_ids: [t.id],
             name: t.name,
             phone: t.phone,
             wechat_id: t.wechat_id,
@@ -165,6 +185,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
             emergency_contact_name: t.emergency_contact_name,
             emergency_contact_phone: t.emergency_contact_phone,
             active_property_names: [...new Set(propNames)],
+            has_active_lease: thisHasActive,
           });
         }
       }
@@ -197,12 +218,44 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
 
       setContacts([...tenantContacts, ...agentContacts]);
       setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, householdId]);
+  }, [householdId]);
+
+  // 弹窗打开时加载联系人
+  useEffect(() => {
+    if (open) loadContacts();
+  }, [open, loadContacts]);
+
+  // 删除租客：软删除该租客名下所有 tenants 记录（同名同号合并的多条一起删）
+  const handleDeleteTenant = async () => {
+    if (!deletingTenant) return;
+    setDeleteBusy(true);
+    try {
+      const { error } = await supabase
+        .from("tenants")
+        .update({ deleted_at: new Date().toISOString() })
+        .in("id", deletingTenant.tenant_ids);
+      if (error) {
+        toast.error("删除失败：" + error.message);
+        return;
+      }
+      toast.success("租客已从通讯录移除");
+      setDeletingTenant(null);
+      loadContacts();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  // 点删除按钮：有生效租约不让删，否则弹确认
+  const requestDeleteTenant = (c: TenantContact) => {
+    if (c.has_active_lease) {
+      toast.error("该租客还有生效中的租约，无法删除。请先在租约页归档相关租约。");
+      return;
+    }
+    setDeletingTenant(c);
+  };
 
   const filtered = useMemo(() => {
     let list = contacts;
@@ -239,6 +292,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
@@ -305,6 +359,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
                   contact={c}
                   onCopy={handleCopy}
                   copiedKey={copiedKey}
+                  onRequestDelete={requestDeleteTenant}
                 />
               ))}
             </div>
@@ -312,6 +367,36 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* 删除租客确认 */}
+    <AlertDialog
+      open={deletingTenant !== null}
+      onOpenChange={(o) => {
+        if (!o && !deleteBusy) setDeletingTenant(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确定删除联系人？</AlertDialogTitle>
+          <AlertDialogDescription>
+            删除后「{deletingTenant?.name}」不再出现在通讯录里。
+            这是软删除，历史租约记录不受影响。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteBusy}>否</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDeleteTenant}
+            disabled={deleteBusy}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleteBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            是，删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
@@ -319,10 +404,12 @@ function ContactCard({
   contact,
   onCopy,
   copiedKey,
+  onRequestDelete,
 }: {
   contact: Contact;
   onCopy: (text: string, key: string, label: string) => void;
   copiedKey: string | null;
+  onRequestDelete: (c: TenantContact) => void;
 }) {
   const isAgent = contact.type === "agent";
   const initial = contact.name.charAt(0).toUpperCase();
@@ -359,6 +446,18 @@ function ContactCard({
             </p>
           )}
         </div>
+        {/* 删除按钮 — 只有租客可删（中介信息挂在租约上，不单独删） */}
+        {contact.type === "tenant" && (
+          <button
+            type="button"
+            onClick={() => onRequestDelete(contact)}
+            className="shrink-0 h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            aria-label="删除联系人"
+            title="删除联系人"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       <div className="space-y-1.5 pl-1">
