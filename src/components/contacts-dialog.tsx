@@ -72,12 +72,12 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      // 拉所有租客 + 关联当前活跃租约
+      // 拉所有租客 + 关联当前活跃租约（房源带 address，显示详细房号）
       const { data: tenantsData } = await supabase
         .from("tenants")
         .select(
           `id, name, phone, wechat_id, id_number, emergency_contact_name, emergency_contact_phone,
-           lease_tenants(is_primary, lease:leases(status, property:properties(name)))`
+           lease_tenants(is_primary, lease:leases(status, property:properties(name, address)))`
         )
         .eq("household_id", householdId)
         .is("deleted_at", null)
@@ -87,7 +87,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
       const { data: agentLeases } = await supabase
         .from("leases")
         .select(
-          "id, agent_name, agent_phone, agent_fee, property:properties(name)"
+          "id, agent_name, agent_phone, agent_fee, property:properties(name, address)"
         )
         .eq("household_id", householdId)
         .eq("rental_source", "agent")
@@ -97,11 +97,12 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
       if (cancelled) return;
 
       // supabase-js 把 1:1 关联返回成数组（即便只有 1 条），unknown 强转兼容
+      type PropertyRef = { name: string; address: string | null };
       type SupaTenant = {
         is_primary: boolean;
         lease:
-          | { status: string; property: { name: string } | { name: string }[] | null }
-          | Array<{ status: string; property: { name: string } | { name: string }[] | null }>
+          | { status: string; property: PropertyRef | PropertyRef[] | null }
+          | Array<{ status: string; property: PropertyRef | PropertyRef[] | null }>
           | null;
       };
       type TenantRow = {
@@ -114,12 +115,14 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         emergency_contact_phone: string | null;
         lease_tenants?: SupaTenant[];
       };
+      // 房源显示「小区名 详细地址」，区分同小区不同房号
       const pickPropertyName = (
-        p: { name: string } | { name: string }[] | null | undefined
+        p: PropertyRef | PropertyRef[] | null | undefined
       ): string | null => {
-        if (!p) return null;
-        if (Array.isArray(p)) return p[0]?.name ?? null;
-        return p.name ?? null;
+        const prop = Array.isArray(p) ? p[0] : p;
+        if (!prop || !prop.name) return null;
+        const addr = (prop.address ?? "").trim();
+        return addr ? `${prop.name} ${addr}` : prop.name;
       };
       // 去重：同一个人在多套房各建租约 → tenants 表里有多条记录。
       // 按「姓名 + 手机号」归并成一张联系人卡，字段取最全的，房源汇总成数组。
@@ -172,7 +175,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         agent_name: string;
         agent_phone: string | null;
         agent_fee: number | null;
-        property: { name: string } | { name: string }[] | null;
+        property: PropertyRef | PropertyRef[] | null;
       };
       // 去重：同个中介名 + 电话 视作同一人，但带不同房源时各保留
       const seen = new Set<string>();
