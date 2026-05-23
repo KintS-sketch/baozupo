@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, LogOut, ChevronRight, Loader2, CreditCard, Bell, Gauge, MessageCircle, Check, Calculator, Sparkles } from "lucide-react";
+import { User, LogOut, ChevronRight, Loader2, CreditCard, Bell, Gauge, MessageCircle, Check, Calculator, Sparkles, FileSignature, IdCard } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/contexts/user-context";
 import { useRouter } from "next/navigation";
@@ -46,15 +49,21 @@ export default function SettingsPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [wechat, setWechat] = useState<WechatBindingState>({ bound: false, nickname: null, boundAt: null });
   const [wechatBusy, setWechatBusy] = useState(false);
+  // 房东实名（电子签约用）
+  const [realName, setRealName] = useState<string>("");
+  const [idNumber, setIdNumber] = useState<string>("");
+  const [realNameDialogOpen, setRealNameDialogOpen] = useState(false);
+  const [realNameDraft, setRealNameDraft] = useState({ name: "", id: "" });
+  const [realNameSaving, setRealNameSaving] = useState(false);
 
-  // 读 user_profiles 看微信绑定状态
+  // 读 user_profiles 看微信绑定 + 房东实名
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("user_profiles")
-        .select("wechat_openid, wechat_nickname, wechat_bound_at")
+        .select("wechat_openid, wechat_nickname, wechat_bound_at, real_name, id_number")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled) return;
@@ -63,10 +72,38 @@ export default function SettingsPage() {
         nickname: data?.wechat_nickname ?? null,
         boundAt: data?.wechat_bound_at ?? null,
       });
+      setRealName(data?.real_name ?? "");
+      setIdNumber(data?.id_number ?? "");
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const openRealNameDialog = () => {
+    setRealNameDraft({ name: realName, id: idNumber });
+    setRealNameDialogOpen(true);
+  };
+
+  const saveRealName = async () => {
+    const name = realNameDraft.name.trim();
+    const id = realNameDraft.id.trim();
+    if (!name) { toast.error("请输入真实姓名"); return; }
+    if (!/^[0-9]{17}[0-9Xx]$/.test(id)) { toast.error("身份证号需为 18 位（最后一位可为 X）"); return; }
+    setRealNameSaving(true);
+    try {
+      const { error } = await supabase
+        .from("user_profiles")
+        .update({ real_name: name, id_number: id })
+        .eq("id", user!.id);
+      if (error) { toast.error(`保存失败：${error.message}`); return; }
+      setRealName(name);
+      setIdNumber(id);
+      setRealNameDialogOpen(false);
+      toast.success("房东实名已保存");
+    } finally {
+      setRealNameSaving(false);
+    }
+  };
 
   // 处理 OAuth 回调后的 toast 提示
   useEffect(() => {
@@ -166,6 +203,45 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 房东实名（电子签约用）*/}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileSignature className="h-4 w-4 text-primary" />
+            房东实名
+            {realName && idNumber ? (
+              <Badge variant="success" className="text-[10px]">已完成</Badge>
+            ) : (
+              <Badge variant="warning" className="text-[10px]">未完成</Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            发起电子合同前，需先实名（依据《电子签名法》）。手机号沿用账号绑定的号码。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <button
+            type="button"
+            onClick={openRealNameDialog}
+            className="w-full flex items-center justify-between py-2 hover:bg-secondary/40 rounded-lg px-2 -mx-2 transition-colors text-left"
+          >
+            <div className="min-w-0">
+              {realName ? (
+                <>
+                  <p className="text-sm font-medium truncate">{realName}</p>
+                  <p className="text-xs text-muted-foreground num">
+                    {idNumber ? `${idNumber.slice(0, 6)}********${idNumber.slice(-4)}` : "—"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">点击填写实名信息</p>
+              )}
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </button>
         </CardContent>
       </Card>
 
@@ -360,6 +436,64 @@ export default function SettingsPage() {
         )}
         退出登录
       </Button>
+
+      {/* 房东实名编辑弹窗 */}
+      <Dialog open={realNameDialogOpen} onOpenChange={(o) => !realNameSaving && setRealNameDialogOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IdCard className="h-5 w-5 text-primary" />
+              房东实名
+            </DialogTitle>
+            <DialogDescription>
+              用于电子签约合同上的房东身份。需与你的身份证一致。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="real-name">真实姓名</Label>
+              <Input
+                id="real-name"
+                value={realNameDraft.name}
+                onChange={(e) => setRealNameDraft((d) => ({ ...d, name: e.target.value }))}
+                disabled={realNameSaving}
+                maxLength={20}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="id-number">身份证号</Label>
+              <Input
+                id="id-number"
+                value={realNameDraft.id}
+                onChange={(e) =>
+                  setRealNameDraft((d) => ({ ...d, id: e.target.value.toUpperCase().slice(0, 18) }))
+                }
+                disabled={realNameSaving}
+                maxLength={18}
+                inputMode="text"
+                placeholder="18 位（最后一位可为 X）"
+                className="num"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              ⚠️ 此信息仅用于合同签署，会以脱敏方式显示在合同审计页（前 6 + 后 4 位）。
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRealNameDialogOpen(false)}
+              disabled={realNameSaving}
+            >
+              取消
+            </Button>
+            <Button onClick={saveRealName} disabled={realNameSaving}>
+              {realNameSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
