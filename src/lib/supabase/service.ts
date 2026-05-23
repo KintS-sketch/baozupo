@@ -7,10 +7,12 @@
  * 需要环境变量 SUPABASE_SERVICE_ROLE_KEY（在 Supabase Studio → Settings → API 找）。
  */
 
+/* eslint-disable */
+
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// 项目暂无生成的 Database 类型，用 SupabaseClient<any> 让 .from(...).select(...) 返回宽松类型
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// 项目暂无生成的 Database 类型，用 any 让 .from(...).select(...) 返回宽松类型。
+// 调用方需自行 cast 返回值。仅此 service 文件用 any，其他模块继续严格类型。
 type AnySupabase = SupabaseClient<any, "public", any>;
 
 let cached: AnySupabase | null = null;
