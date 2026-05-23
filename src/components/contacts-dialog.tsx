@@ -94,7 +94,7 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
         .from("tenants")
         .select(
           `id, name, phone, wechat_id, id_number, emergency_contact_name, emergency_contact_phone,
-           lease_tenants(is_primary, lease:leases(status, property:properties(name, address)))`
+           lease_tenants(is_primary, lease:leases(status, deleted_at, property:properties(name, address)))`
         )
         .eq("household_id", householdId)
         .is("deleted_at", null)
@@ -116,8 +116,8 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
       type SupaTenant = {
         is_primary: boolean;
         lease:
-          | { status: string; property: PropertyRef | PropertyRef[] | null }
-          | Array<{ status: string; property: PropertyRef | PropertyRef[] | null }>
+          | { status: string; deleted_at: string | null; property: PropertyRef | PropertyRef[] | null }
+          | Array<{ status: string; deleted_at: string | null; property: PropertyRef | PropertyRef[] | null }>
           | null;
       };
       type TenantRow = {
@@ -150,6 +150,9 @@ export function ContactsDialog({ open, onOpenChange }: ContactsDialogProps) {
           const l = lt.lease;
           const leases = Array.isArray(l) ? l : l ? [l] : [];
           for (const lease of leases) {
+            // 跳过软删的租约（leases/page.tsx handleDelete 只设 deleted_at，
+            // 不改 status，所以这里必须显式过滤，否则被删的租约会被算成生效中）
+            if (lease.deleted_at) continue;
             if (lease.status !== "active") continue;
             thisHasActive = true;
             const name = pickPropertyName(lease.property);
