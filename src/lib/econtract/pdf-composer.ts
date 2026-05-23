@@ -132,11 +132,16 @@ export async function composeFinalPdf(opts: {
   drawLine("Article 13 & 14, Electronic Signature Law of the PRC (2019 amendment):");
   drawLine("A reliable electronic signature has the same legal effect as a handwritten signature.");
   y -= 8;
-  drawLine("Custodian: yangfang Tend platform (operating entity: [legal name TBD by Tend team])", {
+  drawLine("Custodian: Tend platform (Shenzhen Yikai Technology Co., Ltd.)", {
     size: 9,
     color: [0.4, 0.4, 0.4],
   });
   drawLine("Audit log retention: at least 5 years.", { size: 9, color: [0.4, 0.4, 0.4] });
+  drawLine("Chinese contract text precedes this English audit page; in case of conflict, the", {
+    size: 8,
+    color: [0.4, 0.4, 0.4],
+  });
+  drawLine("Chinese contract prevails.", { size: 8, color: [0.4, 0.4, 0.4] });
 
   const bytes = await src.save();
   return Buffer.from(bytes);

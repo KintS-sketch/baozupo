@@ -105,7 +105,7 @@ export function renderDirectContract(
   doc.font("CJK").fontSize(10);
   doc.text("一、本合同采用电子签约方式签署，依据《中华人民共和国电子签名法》第十三条、第十四条，电子签名与手写签名具有同等法律效力。");
   doc.text("二、本合同自双方完成电子签字之日起生效。");
-  doc.text("三、本合同签署完成后，由养房 Tend 平台存证保管。");
+  doc.text("三、本合同签署完成后，由养房 Tend 平台（运营主体：深圳市一铠科技有限公司）存证保管，保留期限不少于五年。");
   doc.moveDown(1);
 
   // ===== 签字页 =====
