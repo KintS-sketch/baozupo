@@ -65,11 +65,19 @@ async function sendOne(
   }
 }
 
-/** 邀请签字短信（带公开签字页链接）。`name` 限阿里云模板字符长度（一般 20 字内）。*/
-export function sendContractInviteSms(phone: string, landlordName: string, url: string) {
+/**
+ * 邀请签字短信
+ *
+ * 模板：${name}邀请您签署租房合同，请点击 https://tendapp.cn/sign/${code} 完成在线签字。
+ * 阿里云规范：网址不能整个作为变量，域名写死在模板里，变量只能是后缀路径。
+ *
+ * @param landlordName 房东姓名（截断到 16 字内适配阿里云模板）
+ * @param token public_token，会拼到 /sign/[token] 路径
+ */
+export function sendContractInviteSms(phone: string, landlordName: string, token: string) {
   return sendOne(phone, process.env.ALIYUN_SMS_TEMPLATE_CONTRACT_INVITE ?? "", {
     name: landlordName.slice(0, 16),
-    url,
+    code: token,
   });
 }
 
@@ -78,7 +86,13 @@ export function sendContractVerifySms(phone: string, code: string) {
   return sendOne(phone, process.env.ALIYUN_SMS_TEMPLATE_CONTRACT_VERIFY ?? "", { code });
 }
 
-/** 签字完成通知 */
-export function sendContractDoneSms(phone: string, downloadUrl: string) {
-  return sendOne(phone, process.env.ALIYUN_SMS_TEMPLATE_CONTRACT_DONE ?? "", { url: downloadUrl });
+/**
+ * 签字完成通知
+ *
+ * 模板：您的租房合同已完成全部签字，下载合同请点击 https://tendapp.cn/contracts/${code}
+ *
+ * @param contractId 合同 ID，会拼到 /contracts/[id] 路径
+ */
+export function sendContractDoneSms(phone: string, contractId: string) {
+  return sendOne(phone, process.env.ALIYUN_SMS_TEMPLATE_CONTRACT_DONE ?? "", { code: contractId });
 }

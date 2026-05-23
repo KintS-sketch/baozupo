@@ -183,10 +183,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     const next = signers.find((s) => !s.signed_at);
     if (next && next.public_token) {
       const landlord = signers.find((s) => s.role === "landlord");
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://tendapp.cn";
-      const url = `${baseUrl}/sign/${next.public_token}`;
-      // 失败不阻塞主流程，只记 log
-      const inviteResult = await sendContractInviteSms(next.phone, landlord?.name ?? "房东", url);
+      // 阿里云模板里域名 https://tendapp.cn/sign/ 已写死，这里只传 token 部分
+      const inviteResult = await sendContractInviteSms(
+        next.phone,
+        landlord?.name ?? "房东",
+        next.public_token
+      );
       if (!inviteResult.ok) {
         console.error("[contracts/sign] invite SMS fail:", inviteResult);
       }
@@ -268,12 +270,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     })
     .eq("id", contract_id);
 
-  // 通知所有方
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://tendapp.cn";
-  const downloadUrl = `${baseUrl}/contracts/${contract_id}`;
+  // 通知所有方。模板里域名 https://tendapp.cn/contracts/ 已写死，这里只传 contract_id
   await Promise.all(
     signers.map(async (s) => {
-      const r = await sendContractDoneSms(s.phone, downloadUrl);
+      const r = await sendContractDoneSms(s.phone, contract_id);
       if (!r.ok) console.error("[contracts/sign] done SMS fail:", s.role, r);
     })
   );
