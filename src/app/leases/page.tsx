@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink, Users, Link as LinkIcon } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Plus, FileText, MoreVertical, Edit, Loader2, Eye, Trash2, Paperclip, ExternalLink, Users, Link as LinkIcon, FileSignature, CheckCircle2, Clock } from "lucide-react";
 import { InviteLinkDialog } from "@/components/invite-link-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,7 +98,12 @@ function LeasesPageInner() {
   const [leaseSignedUrls, setLeaseSignedUrls] = useState<Record<string, string>>({});
   // 当前查看的租约的「交付情况」账单列表
   const [leaseBills, setLeaseBills] = useState<LeaseBillRow[]>([]);
+  // 电子签合同状态：lease_id → { id, status }
+  const [contractMap, setContractMap] = useState<Record<string, { id: string; status: string }>>({});
+  // 发起电子签时禁用按钮 + 显示 loading
+  const [initiatingLeaseId, setInitiatingLeaseId] = useState<string | null>(null);
 
+  const router = useRouter();
   const supabase = createClient();
 
   const fetchLeaseAttachments = async (leaseId: string) => {
@@ -182,12 +187,56 @@ function LeasesPageInner() {
 
     setLeases(leasesList);
     setLoading(false);
+    // 顺手拉电子签合同状态
+    if (leasesList.length > 0) {
+      const ids = leasesList.map((l) => l.id);
+      const { data: contracts } = await supabase
+        .from("contracts")
+        .select("id, lease_id, status")
+        .in("lease_id", ids)
+        .is("deleted_at", null);
+      const map: Record<string, { id: string; status: string }> = {};
+      (contracts ?? []).forEach((c: { id: string; lease_id: string; status: string }) => {
+        // 同一 lease 上可能有 void/expired + active 两条，优先 active
+        const prev = map[c.lease_id];
+        if (!prev || ["draft", "partial", "signed"].includes(c.status)) {
+          map[c.lease_id] = { id: c.id, status: c.status };
+        }
+      });
+      setContractMap(map);
+    }
   };
 
   useEffect(() => {
     if (!userLoading) fetchLeases();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [householdId, userLoading]);
+
+  /** 发起电子签：调 API → 跳房东签字页 */
+  const handleInitiateContract = async (leaseId: string) => {
+    setInitiatingLeaseId(leaseId);
+    try {
+      const resp = await fetch("/api/contracts/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lease_id: leaseId }),
+      });
+      const j = await resp.json();
+      if (!j.success) {
+        toast.error(j.error ?? "发起失败");
+        if (j.code === "LANDLORD_PROFILE_INCOMPLETE") {
+          // 后续可加跳设置页逻辑
+          toast.error("请到「设置 → 房东实名」补全房东信息");
+        }
+        return;
+      }
+      router.push(`/contracts/${j.contract_id}/sign`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "网络错误");
+    } finally {
+      setInitiatingLeaseId(null);
+    }
+  };
 
   // 反馈 #12: 从邀请箱采纳跳回来时，url 带 prefill_tenant 参数，自动打开新增租约弹窗
   useEffect(() => {
@@ -425,6 +474,19 @@ function LeasesPageInner() {
   const handleDelete = async () => {
     if (!deletingId) return;
     const target = leases.find((l) => l.id === deletingId);
+    // 拦截：该租约已有 signed 电子合同，不允许直接删
+    const { data: signedContract } = await supabase
+      .from("contracts")
+      .select("id")
+      .eq("lease_id", deletingId)
+      .eq("status", "signed")
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (signedContract) {
+      toast.error("该租约已有签署完成的电子合同，无法直接删除。请联系客服处理。");
+      setDeletingId(null);
+      return;
+    }
     const { error } = await supabase
       .from("leases")
       .update({ deleted_at: new Date().toISOString() })
@@ -588,6 +650,31 @@ function LeasesPageInner() {
                                 归档此租约
                               </DropdownMenuItem>
                             )}
+                            {/* 电子签入口 */}
+                            {lease.status === "active" && (() => {
+                              const ec = contractMap[lease.id];
+                              if (!ec) {
+                                return (
+                                  <DropdownMenuItem
+                                    onClick={() => handleInitiateContract(lease.id)}
+                                    disabled={initiatingLeaseId === lease.id}
+                                  >
+                                    {initiatingLeaseId === lease.id ? (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <FileSignature className="mr-2 h-4 w-4" />
+                                    )}
+                                    发起电子签
+                                  </DropdownMenuItem>
+                                );
+                              }
+                              return (
+                                <DropdownMenuItem onClick={() => router.push(`/contracts/${ec.id}`)}>
+                                  <FileSignature className="mr-2 h-4 w-4" />
+                                  查看电子签
+                                </DropdownMenuItem>
+                              );
+                            })()}
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => setDeletingId(lease.id)}
@@ -617,6 +704,33 @@ function LeasesPageInner() {
                     {attCount > 0 ? "点击查看 →" : "点击上传 →"}
                   </span>
                 </div>
+                {/* 电子签状态条（仅生效租约显示）*/}
+                {lease.status === "active" && (() => {
+                  const ec = contractMap[lease.id];
+                  if (!ec) return null;
+                  const isPartial = ec.status === "draft" || ec.status === "partial";
+                  const isSigned = ec.status === "signed";
+                  if (!isPartial && !isSigned) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/contracts/${ec.id}`); }}
+                      className="w-full flex items-center justify-between px-4 py-2 bg-primary-soft/40 border-t text-xs hover:bg-primary-soft/60 transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {isSigned ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                        ) : (
+                          <Clock className="h-3.5 w-3.5 text-warning" />
+                        )}
+                        <span className={isSigned ? "text-success font-semibold" : "text-warning"}>
+                          电子签 · {isSigned ? "已签署" : isPartial ? "等待签字" : ec.status}
+                        </span>
+                      </span>
+                      <span className="text-primary text-[11px]">查看 →</span>
+                    </button>
+                  );
+                })()}
               </Card>
             );
           })}
