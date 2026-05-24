@@ -57,9 +57,12 @@ export async function POST(req: NextRequest) {
       .from("lease_tenants")
       .select("tenant_id, lease:leases(status, deleted_at)")
       .in("tenant_id", validIds);
+    // supabase join 返回的 lease 可能是数组也可能是单对象，统一兜底
+    type LeaseLite = { status: string; deleted_at: string | null };
     const hasActive = (activeLeases ?? []).some((lt) => {
-      const lease = (lt as { lease: { status: string; deleted_at: string | null } | null }).lease;
-      return lease && !lease.deleted_at && lease.status === "active";
+      const raw = (lt as unknown as { lease: LeaseLite | LeaseLite[] | null }).lease;
+      const leases: LeaseLite[] = !raw ? [] : Array.isArray(raw) ? raw : [raw];
+      return leases.some((l) => l && !l.deleted_at && l.status === "active");
     });
     if (hasActive) {
       return NextResponse.json(

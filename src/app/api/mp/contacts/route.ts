@@ -79,13 +79,16 @@ export async function GET(req: NextRequest) {
     ]);
 
     // === 租客去重合并 ===
+    // 注意：supabase 的嵌套 join 字段可能返回单对象或数组（视 schema 推断），全部按数组兜底处理
+    type LeaseProp = { name: string; address: string | null };
+    type LeaseLite = {
+      status: string;
+      deleted_at: string | null;
+      property: LeaseProp | LeaseProp[] | null;
+    };
     type LeaseTenantJoin = {
       is_primary: boolean;
-      lease: {
-        status: string;
-        deleted_at: string | null;
-        property: { name: string; address: string | null } | null;
-      } | null;
+      lease: LeaseLite | LeaseLite[] | null;
     };
     type TenantRow = {
       id: string;
@@ -97,22 +100,29 @@ export async function GET(req: NextRequest) {
       emergency_contact_phone: string | null;
       lease_tenants?: LeaseTenantJoin[];
     };
+    function asArr<T>(v: T | T[] | null | undefined): T[] {
+      if (!v) return [];
+      return Array.isArray(v) ? v : [v];
+    }
 
     const tenantMap = new Map<string, TenantContact>();
-    for (const t of (tenantsRaw ?? []) as TenantRow[]) {
+    for (const t of (tenantsRaw ?? []) as unknown as TenantRow[]) {
       const name = (t.name ?? "").trim();
       const phone = (t.phone ?? "").trim();
       const key = `${name}|${phone}`;
       const activeProperties: string[] = [];
       let hasActive = false;
       for (const lt of t.lease_tenants ?? []) {
-        const lease = lt.lease;
-        if (!lease || lease.deleted_at) continue;
-        if (lease.status !== "active") continue;
-        hasActive = true;
-        const pname = lease.property?.name;
-        if (pname && !activeProperties.includes(pname)) {
-          activeProperties.push(pname);
+        for (const lease of asArr(lt.lease)) {
+          if (!lease || lease.deleted_at) continue;
+          if (lease.status !== "active") continue;
+          hasActive = true;
+          for (const prop of asArr(lease.property)) {
+            const pname = prop?.name;
+            if (pname && !activeProperties.includes(pname)) {
+              activeProperties.push(pname);
+            }
+          }
         }
       }
       const existing = tenantMap.get(key);
@@ -153,14 +163,15 @@ export async function GET(req: NextRequest) {
       agent_name: string | null;
       agent_phone: string | null;
       agent_fee: number | null;
-      property: { name: string; address: string | null } | null;
+      property: LeaseProp | LeaseProp[] | null;
     };
     const agentMap = new Map<string, AgentContact>();
-    for (const l of (leasesRaw ?? []) as LeaseAgentRow[]) {
+    for (const l of (leasesRaw ?? []) as unknown as LeaseAgentRow[]) {
       if (!l.agent_name) continue;
       const name = l.agent_name.trim();
       const phone = (l.agent_phone ?? "").trim();
-      const pname = l.property?.name ?? "—";
+      const props = asArr(l.property);
+      const pname = props[0]?.name ?? "—";
       const key = `${name}|${phone}|${pname}`;
       if (agentMap.has(key)) continue;
       agentMap.set(key, {

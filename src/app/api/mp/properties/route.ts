@@ -80,24 +80,39 @@ export async function GET(req: NextRequest) {
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
+    // supabase 嵌套 join 字段可能返回单对象或数组，统一兜底
+    const asArr = <T,>(v: T | T[] | null | undefined): T[] =>
+      !v ? [] : Array.isArray(v) ? v : [v];
+
     // 每套房源取最近一份 active lease 作为「当前租约」
     const leaseByProperty = new Map<string, ActiveLeaseSummary>();
     for (const l of leases ?? []) {
-      const pid = (l as { property_id: string }).property_id;
-      if (leaseByProperty.has(pid)) continue;
-      const tenants = (l as {
+      const row = l as unknown as {
+        id: string;
+        property_id: string;
+        start_date: string;
+        end_date: string;
+        monthly_rent: number;
         lease_tenants?: {
           is_primary: boolean;
-          tenant: { name: string } | null;
+          tenant: { name: string } | { name: string }[] | null;
         }[];
-      }).lease_tenants;
-      const primary = tenants?.find((t) => t.is_primary) ?? tenants?.[0];
+      };
+      const pid = row.property_id;
+      if (leaseByProperty.has(pid)) continue;
+      const lts = row.lease_tenants ?? [];
+      const primaryName =
+        lts
+          .filter((t) => t.is_primary)
+          .flatMap((t) => asArr(t.tenant))[0]?.name ??
+        lts.flatMap((t) => asArr(t.tenant))[0]?.name ??
+        null;
       leaseByProperty.set(pid, {
-        id: (l as { id: string }).id,
-        start_date: (l as { start_date: string }).start_date,
-        end_date: (l as { end_date: string }).end_date,
-        monthly_rent: Number((l as { monthly_rent: number }).monthly_rent),
-        primary_tenant_name: primary?.tenant?.name ?? null,
+        id: row.id,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        monthly_rent: Number(row.monthly_rent),
+        primary_tenant_name: primaryName,
       });
     }
 

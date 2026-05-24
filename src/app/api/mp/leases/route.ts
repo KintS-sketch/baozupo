@@ -132,8 +132,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // supabase 嵌套 join 字段可能返回单对象或数组（视 schema 推断），统一兜底
+    const asArr = <T,>(v: T | T[] | null | undefined): T[] =>
+      !v ? [] : Array.isArray(v) ? v : [v];
+
     const result: LeaseWithRelations[] = leases.map((l) => {
-      const row = l as {
+      const row = l as unknown as {
         id: string;
         property_id: string;
         start_date: string;
@@ -149,21 +153,24 @@ export async function GET(req: NextRequest) {
         agent_phone: string | null;
         agent_fee: number | null;
         notes: string | null;
-        property: { name: string } | null;
+        property: { name: string } | { name: string }[] | null;
         lease_tenants?: {
           is_primary: boolean;
-          tenant: TenantLite | null;
+          tenant: TenantLite | TenantLite[] | null;
         }[];
       };
       const lts = row.lease_tenants ?? [];
-      const tenantList = lts.map((lt) => lt.tenant).filter((t): t is TenantLite => !!t);
+      const tenantList = lts.flatMap((lt) => asArr(lt.tenant));
       const primary =
-        lts.find((lt) => lt.is_primary && lt.tenant)?.tenant ?? tenantList[0] ?? null;
+        lts
+          .filter((lt) => lt.is_primary)
+          .flatMap((lt) => asArr(lt.tenant))[0] ?? tenantList[0] ?? null;
+      const propName = asArr(row.property)[0]?.name ?? "—";
       const att = attCountByLease.get(row.id) ?? { images: 0, docs: 0 };
       return {
         id: row.id,
         property_id: row.property_id,
-        property_name: row.property?.name ?? "—",
+        property_name: propName,
         start_date: row.start_date,
         end_date: row.end_date,
         monthly_rent: Number(row.monthly_rent),
