@@ -33,6 +33,7 @@ export interface LeaseWithRelations {
   id: string;
   property_id: string;
   property_name: string;
+  property_address: string | null;
   start_date: string;
   end_date: string;
   monthly_rent: number;
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
         `id, property_id, start_date, end_date, monthly_rent, deposit,
          payment_cycle, billing_mode, rent_due_day, status, rental_source,
          agent_name, agent_phone, agent_fee, notes,
-         property:properties(name),
+         property:properties(name, address),
          lease_tenants(is_primary,
            tenant:tenants(id, name, phone, id_type, id_number,
              emergency_contact_name, emergency_contact_phone))`
@@ -153,7 +154,10 @@ export async function GET(req: NextRequest) {
         agent_phone: string | null;
         agent_fee: number | null;
         notes: string | null;
-        property: { name: string } | { name: string }[] | null;
+        property:
+          | { name: string; address: string | null }
+          | { name: string; address: string | null }[]
+          | null;
         lease_tenants?: {
           is_primary: boolean;
           tenant: TenantLite | TenantLite[] | null;
@@ -165,12 +169,15 @@ export async function GET(req: NextRequest) {
         lts
           .filter((lt) => lt.is_primary)
           .flatMap((lt) => asArr(lt.tenant))[0] ?? tenantList[0] ?? null;
-      const propName = asArr(row.property)[0]?.name ?? "—";
+      const propRow = asArr(row.property)[0];
+      const propName = propRow?.name ?? "—";
+      const propAddress = propRow?.address ?? null;
       const att = attCountByLease.get(row.id) ?? { images: 0, docs: 0 };
       return {
         id: row.id,
         property_id: row.property_id,
         property_name: propName,
+        property_address: propAddress,
         start_date: row.start_date,
         end_date: row.end_date,
         monthly_rent: Number(row.monthly_rent),
