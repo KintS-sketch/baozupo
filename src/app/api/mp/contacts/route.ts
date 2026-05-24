@@ -119,8 +119,11 @@ export async function GET(req: NextRequest) {
           hasActive = true;
           for (const prop of asArr(lease.property)) {
             const pname = prop?.name;
-            if (pname && !activeProperties.includes(pname)) {
-              activeProperties.push(pname);
+            const paddr = prop?.address;
+            // 拼成「楼盘 · 房号」，区分同一小区里多套房
+            const display = pname && paddr ? `${pname} · ${paddr}` : pname || paddr;
+            if (display && !activeProperties.includes(display)) {
+              activeProperties.push(display);
             }
           }
         }
