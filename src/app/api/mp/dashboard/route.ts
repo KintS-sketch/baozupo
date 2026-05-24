@@ -152,12 +152,16 @@ export async function GET(req: NextRequest) {
         .select("id", { count: "exact", head: true })
         .eq("status", "overdue")
         .in("lease_id", leaseIds),
+      // 反馈 #4: 只取「当期」账单（period 含今天，或已过期未付清）
+      // 服务端无法用一个查询表达 (期内 OR 已过期未付清)，所以拉所有 period_start <= today 的，
+      // 再 JS filter，最后取 5 条
       admin
         .from("bills")
         .select("*")
         .in("lease_id", leaseIds)
-        .order("created_at", { ascending: false })
-        .limit(5),
+        .lte("period_start", today)
+        .order("due_date", { ascending: false })
+        .limit(50),
       admin
         .from("leases")
         .select("*, property:properties(name)")
@@ -187,6 +191,19 @@ export async function GET(req: NextRequest) {
     const vacantCount =
       (propertiesData ?? []).filter((p: { status: string }) => p.status === "vacant").length;
 
+    // 「当期」筛选：今天落在 period 内，或已过期但未付清
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const currentBills = (recentBillsData ?? [])
+      .filter((b: { period_start: string; period_end: string; status: string }) => {
+        const start = new Date(b.period_start);
+        const end = new Date(b.period_end);
+        if (todayDate >= start && todayDate <= end) return true;
+        if (todayDate > end && b.status !== "paid") return true;
+        return false;
+      })
+      .slice(0, 5);
+
     return NextResponse.json({
       stats: {
         monthlyReceivable,
@@ -195,7 +212,7 @@ export async function GET(req: NextRequest) {
         rentedCount,
         vacantCount,
       },
-      recentBills: recentBillsData ?? [],
+      recentBills: currentBills,
       expiringLeases: expiringData ?? [],
       pendingReminders: reminderCount ?? 0,
     } satisfies DashboardResponse);
