@@ -39,15 +39,27 @@ export async function GET(req: NextRequest) {
         .order("name"),
       admin
         .from("tenants")
-        .select("id, name, phone")
+        .select("id, name, phone, created_at")
         .eq("household_id", user.household_id)
         .is("deleted_at", null)
-        .order("name"),
+        .order("created_at", { ascending: false }),
     ]);
+
+    // 按 (name + phone) 去重，保留最新一条（PWA contacts 端同样的去重逻辑）
+    const seen = new Set<string>();
+    const dedupedTenants: { id: string; name: string; phone: string }[] = [];
+    for (const t of (tnts ?? []) as { id: string; name: string; phone: string }[]) {
+      const key = `${(t.name ?? "").trim()}::${(t.phone ?? "").trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      dedupedTenants.push({ id: t.id, name: t.name, phone: t.phone });
+    }
+    // 按 name 排回去（跟原顺序对齐）
+    dedupedTenants.sort((a, b) => a.name.localeCompare(b.name, "zh"));
 
     return NextResponse.json({
       properties: props ?? [],
-      tenants: tnts ?? [],
+      tenants: dedupedTenants,
     });
   } catch (err) {
     console.error("[api/mp/leases/form-data] fail", err);

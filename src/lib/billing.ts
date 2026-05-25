@@ -11,7 +11,7 @@ import {
   isBefore,
   startOfDay,
 } from "date-fns";
-import type { BillingMode, BillStatus } from "@/types";
+import type { BillingMode, BillStatus, PaymentCycle } from "@/types";
 
 export interface BillPeriod {
   periodStart: Date;
@@ -30,18 +30,51 @@ export interface BillPeriod {
  * @param monthlyRent 月租金（元）
  * @param mode 账单模式
  * @param rentDueDay 每月收租日（1-31）
+ * @param paymentCycle 缴费周期（默认 monthly）。quarterly/biannual/annual 时把相邻 3/6/12 个月合成 1 张账单
  */
 export function generateBillPeriods(
   startDate: Date,
   endDate: Date,
   monthlyRent: number,
   mode: BillingMode,
-  rentDueDay: number
+  rentDueDay: number,
+  paymentCycle: PaymentCycle = "monthly"
 ): BillPeriod[] {
-  if (mode === "rolling_month") {
-    return generateRollingMonthPeriods(startDate, endDate, monthlyRent, rentDueDay);
+  const monthly =
+    mode === "rolling_month"
+      ? generateRollingMonthPeriods(startDate, endDate, monthlyRent, rentDueDay)
+      : generateNaturalMonthPeriods(startDate, endDate, monthlyRent, rentDueDay);
+  return aggregateByCycle(monthly, paymentCycle);
+}
+
+/**
+ * 按 paymentCycle 聚合月度账单。
+ * 把每 N 个相邻 monthly period 合并成一张账单（N = 1/3/6/12）。
+ * 不足 N 个的尾段合成一张（不补足）。
+ */
+function aggregateByCycle(monthly: BillPeriod[], cycle: PaymentCycle): BillPeriod[] {
+  const groupSize =
+    cycle === "quarterly" ? 3 : cycle === "biannual" ? 6 : cycle === "annual" ? 12 : 1;
+  if (groupSize === 1 || monthly.length === 0) return monthly;
+
+  const out: BillPeriod[] = [];
+  for (let i = 0; i < monthly.length; i += groupSize) {
+    const chunk = monthly.slice(i, i + groupSize);
+    const first = chunk[0];
+    const last = chunk[chunk.length - 1];
+    out.push({
+      periodStart: first.periodStart,
+      periodEnd: last.periodEnd,
+      daysInPeriod: chunk.reduce((s, p) => s + p.daysInPeriod, 0),
+      daysInMonth: first.daysInMonth,
+      ratio: first.ratio,
+      rentAmount: parseFloat(
+        chunk.reduce((s, p) => s + p.rentAmount, 0).toFixed(2)
+      ),
+      dueDate: first.dueDate,
+    });
   }
-  return generateNaturalMonthPeriods(startDate, endDate, monthlyRent, rentDueDay);
+  return out;
 }
 
 /**

@@ -329,7 +329,8 @@ function LeasesPageInner() {
             new Date(values.end_date),
             values.monthly_rent,
             values.billing_mode,
-            values.rent_due_day
+            values.rent_due_day,
+            values.payment_cycle
           );
           const today = new Date();
           const billRows = periods.map((p) => ({
@@ -435,7 +436,8 @@ function LeasesPageInner() {
           new Date(values.end_date),
           values.monthly_rent,
           values.billing_mode,
-          values.rent_due_day
+          values.rent_due_day,
+          values.payment_cycle
         );
         const today = new Date();
         const billRows = periods.map((p) => ({

@@ -246,7 +246,8 @@ export async function POST(req: NextRequest) {
             new Date(end_date),
             monthly_rent,
             billing_mode,
-            rent_due_day
+            rent_due_day,
+            payment_cycle
           );
           const today = new Date();
           const billRows = periods.map((p) => ({
@@ -360,7 +361,8 @@ export async function POST(req: NextRequest) {
         new Date(end_date),
         monthly_rent,
         billing_mode,
-        rent_due_day
+        rent_due_day,
+        payment_cycle
       );
       const today = new Date();
       const billRows = periods.map((p) => ({
