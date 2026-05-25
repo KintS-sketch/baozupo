@@ -96,3 +96,13 @@ export function sendContractVerifySms(phone: string, code: string) {
 export function sendContractDoneSms(phone: string, contractId: string) {
   return sendOne(phone, process.env.ALIYUN_SMS_TEMPLATE_CONTRACT_DONE ?? "", { code: contractId });
 }
+
+/**
+ * 登录/注册验证码短信
+ *
+ * 模板：您正在登录养房Tend，验证码：${code}，5分钟内有效，请勿泄露。
+ * 模板 Code: ALIYUN_SMS_TEMPLATE_LOGIN_OTP（在 .env.production 配置，如 SMS_506955201）
+ */
+export function sendLoginOtpSms(phone: string, code: string) {
+  return sendOne(phone, process.env.ALIYUN_SMS_TEMPLATE_LOGIN_OTP ?? "", { code });
+}
