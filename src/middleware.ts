@@ -42,6 +42,12 @@ export async function middleware(request: NextRequest) {
   const isPublicInvite = request.nextUrl.pathname.startsWith("/invite");
   // /sign/[token] 是公开电子签字页（租客/中介通过短信链接打开）
   const isPublicSign = request.nextUrl.pathname.startsWith("/sign/");
+  // /privacy /terms 是公开协议页（微信小程序 web-view 加载 + 法律披露）
+  const isPublicLegal =
+    request.nextUrl.pathname === "/privacy" ||
+    request.nextUrl.pathname === "/terms" ||
+    request.nextUrl.pathname.startsWith("/privacy/") ||
+    request.nextUrl.pathname.startsWith("/terms/");
   const isPublicAsset =
     request.nextUrl.pathname.startsWith("/_next") ||
     request.nextUrl.pathname.includes(".");
@@ -52,7 +58,8 @@ export async function middleware(request: NextRequest) {
     !isApiRoute &&
     !isPublicAsset &&
     !isPublicInvite &&
-    !isPublicSign
+    !isPublicSign &&
+    !isPublicLegal
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
