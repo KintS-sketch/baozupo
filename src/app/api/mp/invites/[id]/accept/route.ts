@@ -32,6 +32,12 @@ interface SubmittedData {
   agent_name?: string;
   agent_phone?: string;
   chosen_role?: "tenant" | "agent";
+  // 租约信息（租客在邀请页填的，采纳后回传给前端预填新建租约）
+  start_date?: string;
+  duration_months?: number;
+  monthly_rent?: number;
+  deposit?: number;
+  payment_cycle?: "monthly" | "quarterly" | "semiannual" | "annual";
 }
 
 export async function POST(
@@ -146,6 +152,18 @@ export async function POST(
   const isAgent =
     s.chosen_role === "agent" || invite.purpose === "agent_register";
 
+  // 租约预填字段（如果租客填了租约信息，回给前端用于预填新建租约弹窗）
+  const lease_prefill =
+    s.start_date && s.monthly_rent != null
+      ? {
+          start_date: s.start_date,
+          duration_months: s.duration_months ?? 12,
+          monthly_rent: s.monthly_rent,
+          deposit: s.deposit ?? 0,
+          payment_cycle: s.payment_cycle ?? "monthly",
+        }
+      : null;
+
   return NextResponse.json({
     success: true,
     tenant_id: tenant.id,
@@ -153,5 +171,6 @@ export async function POST(
     rental_source: isAgent ? "agent" : "direct",
     agent_name: isAgent ? s.agent_name ?? null : null,
     agent_phone: isAgent ? s.agent_phone ?? null : null,
+    lease_prefill,
   });
 }

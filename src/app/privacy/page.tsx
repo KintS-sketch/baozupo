@@ -1,6 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
 export const metadata = {
   title: "隐私政策 - 养房 Tend",
@@ -13,13 +12,6 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-[#FBEEE9]/30">
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 md:py-10">
-        <Link
-          href="/login"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
-        >
-          <ArrowLeft className="h-4 w-4" /> 返回登录
-        </Link>
-
         <article className="bg-white rounded-2xl shadow-sm p-6 md:p-10 prose prose-sm md:prose-base max-w-none">
           <h1 className="text-2xl md:text-3xl font-bold text-[#C8553D] mb-2">养房 Tend 隐私政策</h1>
           <p className="text-sm text-muted-foreground mb-6">

@@ -29,6 +29,7 @@ const ID_CARD_RE = /^\d{17}[\dXx]$/;
 const WECHAT_RE = /^[a-zA-Z][a-zA-Z0-9_-]{5,19}$|^[一-龥_a-zA-Z0-9-]{2,20}$/;
 
 // 公开表单：所有租客字段必填（除备注）。中介模式额外填中介自己。
+// 反馈：加 5 个租约字段，让租客顺便填租约信息，房东只需采纳即可
 const schema = z.object({
   // 租客信息
   name: z.string().min(1, "请填写租客姓名"),
@@ -46,6 +47,22 @@ const schema = z.object({
     .optional()
     .refine((v) => !v || isValidPhone(v), "请输入正确的紧急联系人电话"),
   notes: z.string().optional(),
+  // 租约信息（让租客填，房东采纳后核对）
+  start_date: z.string().min(1, "请选择起租日期"),
+  duration_months: z.coerce
+    .number({ message: "请填写租期月数" })
+    .int("租期必须为整数")
+    .min(1, "租期至少 1 个月")
+    .max(120, "租期最长 10 年"),
+  monthly_rent: z.coerce
+    .number({ message: "请填写月租金" })
+    .min(0, "月租金不能为负数"),
+  deposit: z.coerce
+    .number({ message: "请填写押金" })
+    .min(0, "押金不能为负数"),
+  payment_cycle: z.enum(["monthly", "quarterly", "semiannual", "annual"], {
+    message: "请选择付款周期",
+  }),
   // 中介信息（仅中介模式必填）
   agent_name: z.string().optional(),
   agent_phone: z.string().optional().refine((v) => !v || isValidPhone(v), "请输入正确的手机号"),
@@ -106,6 +123,11 @@ export default function InvitePage({
       emergency_contact_name: "",
       emergency_contact_phone: "",
       notes: "",
+      start_date: "",
+      duration_months: 12 as unknown as number,
+      monthly_rent: "" as unknown as number,
+      deposit: "" as unknown as number,
+      payment_cycle: "monthly",
       agent_name: "",
       agent_phone: "",
     },
@@ -324,10 +346,10 @@ export default function InvitePage({
     );
   }
 
-  const purposeLabel = isAgentMode ? "中介代填租客信息" : "租客信息登记";
+  const purposeLabel = isAgentMode ? "请帮房东填写租客 + 中介信息" : "请帮房东填写你的入住信息";
   const subtitle = isAgentMode
-    ? "请填写中介本人 + 即将入住租客的信息"
-    : "房东邀请你填写信息 · 提交后将自动发送给房东";
+    ? "请如实填写中介本人 + 即将入住租客的信息及租约要点，房东核对后会建立租约"
+    : "请如实填写以下信息，房东核对后会建立租约。所有 * 为必填项";
 
   return (
     <div className="min-h-screen bg-muted/30 py-6">
@@ -513,12 +535,134 @@ export default function InvitePage({
                   )}
                 />
 
+                {/* ---- 租约信息区块 ---- */}
+                <div className="pt-3 mt-2 border-t border-border">
+                  <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    租约信息
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="start_date"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>起租日期 *</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="duration_months"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>租期（月）*</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={120}
+                              placeholder="如 12"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <FormField
+                      control={form.control}
+                      name="monthly_rent"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>月租金（元）*</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="0.01"
+                              placeholder="如 3000"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="deposit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>押金（元）*</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="0.01"
+                              placeholder="如 3000"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="payment_cycle"
+                    render={({ field }) => (
+                      <FormItem className="mt-3">
+                        <FormLabel>付款周期 *</FormLabel>
+                        <FormControl>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { v: "monthly", l: "月付" },
+                              { v: "quarterly", l: "季付" },
+                              { v: "semiannual", l: "半年付" },
+                              { v: "annual", l: "年付" },
+                            ].map((opt) => (
+                              <button
+                                type="button"
+                                key={opt.v}
+                                onClick={() => field.onChange(opt.v)}
+                                className={`rounded-lg border py-2 text-sm transition-colors ${
+                                  field.value === opt.v
+                                    ? "border-primary bg-primary/10 text-primary font-medium"
+                                    : "border-border bg-white text-foreground hover:border-primary/40"
+                                }`}
+                              >
+                                {opt.l}
+                              </button>
+                            ))}
+                          </div>
+                        </FormControl>
+                        <FormDescription>房东会按此周期生成账单</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 <FormField
                   control={form.control}
                   name="notes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>备注</FormLabel>
+                      <FormLabel>备注（选填）</FormLabel>
                       <FormControl>
                         <Textarea placeholder="想跟房东说的话..." rows={3} {...field} />
                       </FormControl>

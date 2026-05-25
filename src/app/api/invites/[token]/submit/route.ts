@@ -13,6 +13,12 @@ interface SubmitBody {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   notes?: string;
+  // 租约信息（让租客填，房东采纳时核对）
+  start_date?: string;
+  duration_months?: number | string;
+  monthly_rent?: number | string;
+  deposit?: number | string;
+  payment_cycle?: string;
   // 中介信息（agent 模式或 dualRole 模式选中介时携带）
   agent_name?: string;
   agent_phone?: string;
@@ -56,6 +62,28 @@ export async function POST(
       { error: "紧急联系人电话格式不正确" },
       { status: 400 }
     );
+  }
+
+  // 租约字段校验
+  const startDate = (body.start_date ?? "").trim();
+  const durationMonths = Number(body.duration_months);
+  const monthlyRent = Number(body.monthly_rent);
+  const deposit = Number(body.deposit);
+  const paymentCycle = (body.payment_cycle ?? "").trim();
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    return NextResponse.json({ error: "请填写起租日期" }, { status: 400 });
+  }
+  if (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 120) {
+    return NextResponse.json({ error: "租期需为 1-120 之间的整数" }, { status: 400 });
+  }
+  if (!Number.isFinite(monthlyRent) || monthlyRent < 0) {
+    return NextResponse.json({ error: "月租金格式不正确" }, { status: 400 });
+  }
+  if (!Number.isFinite(deposit) || deposit < 0) {
+    return NextResponse.json({ error: "押金格式不正确" }, { status: 400 });
+  }
+  if (!["monthly", "quarterly", "semiannual", "annual"].includes(paymentCycle)) {
+    return NextResponse.json({ error: "请选择有效的付款周期" }, { status: 400 });
   }
 
   // 用 anon 客户端（无 user session）走 RLS public_submit_by_token 策略
@@ -110,6 +138,12 @@ export async function POST(
     emergency_contact_name: body.emergency_contact_name?.trim() || null,
     emergency_contact_phone: body.emergency_contact_phone?.trim() || null,
     notes: body.notes?.trim() || null,
+    // 租约信息（房东采纳时核对 + 自动建租约）
+    start_date: startDate,
+    duration_months: durationMonths,
+    monthly_rent: monthlyRent,
+    deposit: deposit,
+    payment_cycle: paymentCycle,
     // 中介信息（agent / dualRole 模式选中介时）
     agent_name: body.agent_name?.trim() || null,
     agent_phone: body.agent_phone?.trim() || null,
