@@ -41,6 +41,8 @@ interface NewTenantPayload {
   wechat_id?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
+  /** 身份证图片在 contracts bucket 内的相对路径（mp 端 scanIdCard 上传后取得） */
+  id_card_image_url?: string | null;
 }
 
 interface SaveBody {
@@ -318,6 +320,7 @@ export async function POST(req: NextRequest) {
             (t.emergency_contact_name ?? "").trim() || null,
           emergency_contact_phone:
             (t.emergency_contact_phone ?? "").trim() || null,
+          id_card_image_url: (t.id_card_image_url ?? "")?.toString().trim() || null,
         })
         .select("id")
         .single();
@@ -384,6 +387,29 @@ export async function POST(req: NextRequest) {
         console.error("[api/mp/leases/save] bills insert fail", billsErr);
       } else {
         billCount = billRows.length;
+      }
+
+      // 押金单独一张账单（#5 反馈）
+      if (deposit > 0) {
+        const { error: depErr } = await admin.from("bills").insert({
+          lease_id: newLease.id,
+          period_start: start_date,
+          period_end: start_date,
+          days_in_period: 0,
+          ratio: 0,
+          due_date: start_date,
+          rent_amount: 0,
+          utility_amount: 0,
+          other_amount: deposit,
+          total_amount: deposit,
+          paid_amount: 0,
+          status: calculateBillStatus(deposit, 0, new Date(start_date), today),
+          bill_type: "deposit",
+          notes: "押金（创建租约时自动生成）",
+        });
+        if (depErr) {
+          console.error("[api/mp/leases/save] deposit bill insert fail", depErr);
+        }
       }
     }
 

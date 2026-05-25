@@ -28,6 +28,8 @@ export interface TenantContact {
   emergency_contact_phone: string | null;
   active_property_names: string[];
   has_active_lease: boolean;
+  /** 若多条合并行中任一条传过身份证，标 true。前端点查看时再用 tenant_ids[0] 调 id-card 接口取 signed URL */
+  has_id_card_image: boolean;
 }
 
 export interface AgentContact {
@@ -59,7 +61,7 @@ export async function GET(req: NextRequest) {
         .from("tenants")
         .select(
           `id, name, phone, wechat_id, id_number, emergency_contact_name,
-           emergency_contact_phone,
+           emergency_contact_phone, id_card_image_url,
            lease_tenants(is_primary,
              lease:leases(status, deleted_at, property:properties(name, address)))`
         )
@@ -98,6 +100,7 @@ export async function GET(req: NextRequest) {
       id_number: string | null;
       emergency_contact_name: string | null;
       emergency_contact_phone: string | null;
+      id_card_image_url: string | null;
       lease_tenants?: LeaseTenantJoin[];
     };
     function asArr<T>(v: T | T[] | null | undefined): T[] {
@@ -143,6 +146,15 @@ export async function GET(req: NextRequest) {
           }
         }
         existing.has_active_lease = existing.has_active_lease || hasActive;
+        existing.has_id_card_image =
+          existing.has_id_card_image || !!t.id_card_image_url;
+        // tenant_ids 顺序：把"有图的"放前面，方便前端取 tenant_ids[0] 调 id-card
+        if (t.id_card_image_url && existing.tenant_ids[0] !== t.id) {
+          existing.tenant_ids = [
+            t.id,
+            ...existing.tenant_ids.filter((id) => id !== t.id),
+          ];
+        }
       } else {
         tenantMap.set(key, {
           type: "tenant",
@@ -156,6 +168,7 @@ export async function GET(req: NextRequest) {
           emergency_contact_phone: t.emergency_contact_phone,
           active_property_names: activeProperties,
           has_active_lease: hasActive,
+          has_id_card_image: !!t.id_card_image_url,
         });
       }
     }

@@ -29,6 +29,7 @@ export interface BillWithLease {
   total_amount: number;
   paid_amount: number;
   status: "pending" | "partial" | "paid" | "overdue";
+  bill_type: "rent" | "deposit";
   notes: string | null;
   property_name: string;
   primary_tenant_name: string | null;
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
       .select(
         `id, lease_id, period_start, period_end, due_date,
          rent_amount, utility_amount, other_amount, total_amount, paid_amount,
-         status, notes,
+         status, bill_type, notes,
          lease:leases(
            property:properties(name),
            lease_tenants(is_primary, tenant:tenants(name))
@@ -100,6 +101,7 @@ export async function GET(req: NextRequest) {
       total_amount: number;
       paid_amount: number;
       status: string;
+      bill_type: "rent" | "deposit" | null;
       notes: string | null;
       lease:
         | {
@@ -142,6 +144,7 @@ export async function GET(req: NextRequest) {
         total_amount: Number(row.total_amount),
         paid_amount: Number(row.paid_amount),
         status: row.status as BillWithLease["status"],
+        bill_type: (row.bill_type ?? "rent") as BillWithLease["bill_type"],
         notes: row.notes,
         property_name: propName,
         primary_tenant_name: primaryName,
