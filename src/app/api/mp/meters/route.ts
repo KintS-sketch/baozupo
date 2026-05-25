@@ -16,6 +16,7 @@ interface MeterReading {
   id: string;
   property_id: string;
   property_name: string;
+  property_address: string | null;
   type: string;
   reading_date: string;
   value: number;
@@ -93,6 +94,7 @@ export async function GET(req: NextRequest) {
       id: r.id,
       property_id: r.property_id,
       property_name: p?.name ?? "—",
+      property_address: p?.address ?? null,
       type: r.type,
       reading_date: r.reading_date,
       value: Number(r.value),

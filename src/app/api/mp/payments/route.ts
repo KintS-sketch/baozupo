@@ -19,6 +19,7 @@ interface PaymentRow {
   notes: string | null;
   ai_recognized: boolean;
   property_name: string;
+  property_address: string | null;
   primary_tenant_name: string | null;
   period_start: string | null;
   period_end: string | null;
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
        bill:bills(
          period_start, period_end,
          lease:leases(
-           property:properties(name),
+           property:properties(name, address),
            lease_tenants(is_primary, tenant:tenants(name))
          )
        )`
@@ -127,10 +128,9 @@ export async function GET(req: NextRequest) {
         }
       | undefined;
     const lease = bill ? asArr(bill.lease)[0] : undefined;
-    const propName =
-      asArr((lease as { property?: unknown } | undefined)?.property)[0] as
-        | { name: string }
-        | undefined;
+    const propRow = asArr((lease as { property?: unknown } | undefined)?.property)[0] as
+      | { name: string; address: string | null }
+      | undefined;
     const lts = (lease as { lease_tenants?: { is_primary: boolean; tenant: unknown }[] } | undefined)
       ?.lease_tenants ?? [];
     const primaryName =
@@ -146,7 +146,8 @@ export async function GET(req: NextRequest) {
       method: row.method,
       notes: row.notes,
       ai_recognized: !!row.ai_recognized,
-      property_name: propName?.name ?? "—",
+      property_name: propRow?.name ?? "—",
+      property_address: propRow?.address ?? null,
       primary_tenant_name: (primaryName as { name?: string } | undefined)?.name ?? null,
       period_start: bill?.period_start ?? null,
       period_end: bill?.period_end ?? null,

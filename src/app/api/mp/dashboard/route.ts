@@ -157,7 +157,9 @@ export async function GET(req: NextRequest) {
       // 再 JS filter，最后取 5 条
       admin
         .from("bills")
-        .select("*")
+        .select(
+          "*, lease:leases(property:properties(name, address))"
+        )
         .in("lease_id", leaseIds)
         .lte("period_start", today)
         .order("due_date", { ascending: false })
@@ -194,6 +196,8 @@ export async function GET(req: NextRequest) {
     // 「当期」筛选：今天落在 period 内，或已过期但未付清
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
+    const asArr2 = <T,>(v: T | T[] | null | undefined): T[] =>
+      !v ? [] : Array.isArray(v) ? v : [v];
     const currentBills = (recentBillsData ?? [])
       .filter((b: { period_start: string; period_end: string; status: string }) => {
         const start = new Date(b.period_start);
@@ -202,7 +206,20 @@ export async function GET(req: NextRequest) {
         if (todayDate > end && b.status !== "paid") return true;
         return false;
       })
-      .slice(0, 5);
+      .slice(0, 5)
+      .map((b: Record<string, unknown>) => {
+        // 把嵌套 lease.property 展平成 property_name / property_address，跟 /api/mp/bills 一致
+        const lease = asArr2(b.lease as unknown)[0] as { property?: unknown } | undefined;
+        const prop = asArr2(lease?.property)[0] as
+          | { name: string; address: string | null }
+          | undefined;
+        return {
+          ...b,
+          property_name: prop?.name ?? "—",
+          property_address: prop?.address ?? null,
+          lease: undefined, // 前端用不到嵌套对象，去掉省 payload
+        };
+      });
 
     return NextResponse.json({
       stats: {

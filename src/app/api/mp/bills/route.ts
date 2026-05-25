@@ -32,6 +32,7 @@ export interface BillWithLease {
   bill_type: "rent" | "deposit";
   notes: string | null;
   property_name: string;
+  property_address: string | null;
   primary_tenant_name: string | null;
 }
 
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
          rent_amount, utility_amount, other_amount, total_amount, paid_amount,
          status, bill_type, notes,
          lease:leases(
-           property:properties(name),
+           property:properties(name, address),
            lease_tenants(is_primary, tenant:tenants(name))
          )`
       )
@@ -105,14 +106,20 @@ export async function GET(req: NextRequest) {
       notes: string | null;
       lease:
         | {
-            property: { name: string } | { name: string }[] | null;
+            property:
+              | { name: string; address: string | null }
+              | { name: string; address: string | null }[]
+              | null;
             lease_tenants?: {
               is_primary: boolean;
               tenant: { name: string } | { name: string }[] | null;
             }[];
           }
         | Array<{
-            property: { name: string } | { name: string }[] | null;
+            property:
+              | { name: string; address: string | null }
+              | { name: string; address: string | null }[]
+              | null;
             lease_tenants?: {
               is_primary: boolean;
               tenant: { name: string } | { name: string }[] | null;
@@ -124,7 +131,9 @@ export async function GET(req: NextRequest) {
     const bills: BillWithLease[] = (rows ?? []).map((r) => {
       const row = r as unknown as Row;
       const lease = asArr(row.lease)[0];
-      const propName = asArr(lease?.property)[0]?.name ?? "—";
+      const propRow = asArr(lease?.property)[0];
+      const propName = propRow?.name ?? "—";
+      const propAddress = propRow?.address ?? null;
       const lts = lease?.lease_tenants ?? [];
       const primaryName =
         lts
@@ -147,6 +156,7 @@ export async function GET(req: NextRequest) {
         bill_type: (row.bill_type ?? "rent") as BillWithLease["bill_type"],
         notes: row.notes,
         property_name: propName,
+        property_address: propAddress,
         primary_tenant_name: primaryName,
       };
     });

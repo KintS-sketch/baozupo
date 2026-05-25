@@ -60,12 +60,12 @@ export async function GET(req: NextRequest) {
 
   const { data: props } = await admin
     .from("properties")
-    .select("id, name")
+    .select("id, name, address")
     .eq("household_id", user.household_id)
     .is("deleted_at", null);
-  const propMap = new Map<string, string>();
-  (props ?? []).forEach((p: { id: string; name: string }) =>
-    propMap.set(p.id, p.name)
+  const propMap = new Map<string, { name: string; address: string | null }>();
+  (props ?? []).forEach((p: { id: string; name: string; address: string | null }) =>
+    propMap.set(p.id, { name: p.name, address: p.address })
   );
 
   const leaseIds = validLeases.map((l: { id: string }) => l.id);
@@ -179,7 +179,8 @@ export async function GET(req: NextRequest) {
   const byProperty = [...new Set([...byPropertyReceived.keys(), ...byPropertyProjected.keys()])].map(
     (pid) => ({
       property_id: pid,
-      property_name: propMap.get(pid) ?? "—",
+      property_name: propMap.get(pid)?.name ?? "—",
+      property_address: propMap.get(pid)?.address ?? null,
       received: Math.round((byPropertyReceived.get(pid) ?? 0) * 100) / 100,
       projected: Math.round((byPropertyProjected.get(pid) ?? 0) * 100) / 100,
     })
