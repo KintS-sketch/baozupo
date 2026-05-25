@@ -166,10 +166,15 @@ export async function POST(req: Request) {
     }
     userId = created.user.id;
 
-    // 5. user_profiles 触发器自动建了一行，update 加 openid
+    // 5. user_profiles 触发器自动建了一行，update 加 openid + 默认昵称「房东」
+    // （前端不应该显示虚拟邮箱 mp_xxx@tend.internal，所以这里给个默认 display_name）
     const { error: updateProfErr } = await admin
       .from("user_profiles")
-      .update({ wechat_mp_openid: openid, wechat_unionid: unionid })
+      .update({
+        wechat_mp_openid: openid,
+        wechat_unionid: unionid,
+        display_name: "房东",
+      })
       .eq("id", userId);
     if (updateProfErr) {
       console.warn("[wechat-mp-login] update profile fail", updateProfErr);
@@ -208,12 +213,19 @@ export async function POST(req: Request) {
     );
   }
 
-  // 8. 查 household_id 返回给前端
-  const { data: member } = await admin
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", userId)
-    .maybeSingle();
+  // 8. 查 household_id + display_name 返回给前端
+  const [{ data: member }, { data: profileForReturn }] = await Promise.all([
+    admin
+      .from("household_members")
+      .select("household_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    admin
+      .from("user_profiles")
+      .select("display_name")
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
 
   return NextResponse.json({
     success: true,
@@ -225,6 +237,7 @@ export async function POST(req: Request) {
       id: userId,
       email: sessionData.user?.email ?? fakeEmail,
       phone: null,
+      display_name: profileForReturn?.display_name ?? "房东",
     },
   });
 }

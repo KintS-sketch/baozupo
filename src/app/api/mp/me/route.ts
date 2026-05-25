@@ -24,6 +24,7 @@ export interface MeResponse {
     phone: string | null;
   };
   profile: {
+    display_name: string | null;
     real_name: string | null;
     id_number: string | null;
     wechat_openid: string | null;
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
     const [{ data: profile }, householdResult] = await Promise.all([
       admin
         .from("user_profiles")
-        .select("real_name, id_number, wechat_openid, wechat_nickname, wechat_bound_at")
+        .select("display_name, real_name, id_number, wechat_openid, wechat_nickname, wechat_bound_at")
         .eq("id", user.id)
         .maybeSingle(),
       user.household_id
@@ -75,6 +76,7 @@ export async function GET(req: NextRequest) {
         phone: user.phone ?? null,
       },
       profile: {
+        display_name: profile?.display_name ?? null,
         real_name: profile?.real_name ?? null,
         id_number: profile?.id_number ?? null,
         wechat_openid: profile?.wechat_openid ?? null,
