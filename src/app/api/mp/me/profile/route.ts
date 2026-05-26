@@ -70,13 +70,13 @@ export async function PUT(req: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // 用 upsert：万一 trigger 没建 user_profiles 行（历史用户偶尔会出现）也能兜底
   const { error: updateErr } = await admin
     .from("user_profiles")
-    .update(updates)
-    .eq("id", user.id);
+    .upsert({ id: user.id, ...updates }, { onConflict: "id" });
 
   if (updateErr) {
-    console.error("[api/mp/me/profile] update fail", updateErr);
+    console.error("[api/mp/me/profile] upsert fail", updateErr);
     return NextResponse.json(
       { error: "保存失败：" + updateErr.message },
       { status: 500 }
