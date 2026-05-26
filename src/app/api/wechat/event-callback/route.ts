@@ -141,14 +141,11 @@ async function bindOpenidToUser(userId: string, openid: string): Promise<void> {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // 校验 userId 是真实存在的（防止恶意构造 scene_str）
-  const { data: existing } = await admin
-    .from("user_profiles")
-    .select("id")
-    .eq("id", userId)
-    .maybeSingle();
-  if (!existing) {
-    throw new Error(`scene_str 对应的 user_id 不存在：${userId}`);
+  // 校验 userId 是真实存在的 auth.users（防止恶意构造 scene_str）
+  // 不查 user_profiles，因为新用户可能还没建过这行
+  const { data: authData, error: authErr } = await admin.auth.admin.getUserById(userId);
+  if (authErr || !authData?.user) {
+    throw new Error(`scene_str 对应的 user 不存在：${userId}`);
   }
 
   // 先把别的账号占用同 openid 的清掉（避免冲突）
@@ -163,15 +160,18 @@ async function bindOpenidToUser(userId: string, openid: string): Promise<void> {
     .eq("wechat_openid", openid)
     .neq("id", userId);
 
-  // 绑定到当前 userId
+  // upsert 绑定到当前 userId（user_profiles 行可能尚未创建）
   const { error: upErr } = await admin
     .from("user_profiles")
-    .update({
-      wechat_openid: openid,
-      wechat_bound_at: new Date().toISOString(),
-      wechat_subscribed: true,
-    })
-    .eq("id", userId);
+    .upsert(
+      {
+        id: userId,
+        wechat_openid: openid,
+        wechat_bound_at: new Date().toISOString(),
+        wechat_subscribed: true,
+      },
+      { onConflict: "id" }
+    );
 
   if (upErr) {
     throw new Error(`绑定 OpenID 失败：${upErr.message}`);
