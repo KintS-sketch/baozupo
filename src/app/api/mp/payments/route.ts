@@ -18,6 +18,8 @@ interface PaymentRow {
   method: string;
   notes: string | null;
   ai_recognized: boolean;
+  /** 转账截图 signed URL（1 小时有效），无则为 null */
+  screenshot_signed_url: string | null;
   property_name: string;
   property_address: string | null;
   primary_tenant_name: string | null;
@@ -61,7 +63,7 @@ export async function GET(req: NextRequest) {
   const { data: rows, error } = await admin
     .from("payments")
     .select(
-      `id, bill_id, amount, paid_at, method, notes, ai_recognized,
+      `id, bill_id, amount, paid_at, method, notes, ai_recognized, screenshot_url,
        bill:bills(
          period_start, period_end,
          lease:leases(
@@ -89,6 +91,7 @@ export async function GET(req: NextRequest) {
     method: string;
     notes: string | null;
     ai_recognized: boolean | null;
+    screenshot_url: string | null;
     bill:
       | {
           period_start: string;
@@ -118,6 +121,25 @@ export async function GET(req: NextRequest) {
       | null;
   };
 
+  // 先收集所有非空 screenshot_url 一次性批量签名（contracts bucket 是 private）
+  const screenshotPaths = (rows ?? [])
+    .map((r) => (r as { screenshot_url?: string | null }).screenshot_url)
+    .filter((p): p is string => !!p && typeof p === "string");
+  const signedMap: Record<string, string> = {};
+  if (screenshotPaths.length > 0) {
+    const signResults = await Promise.all(
+      screenshotPaths.map(async (p) => {
+        const { data: s } = await admin.storage
+          .from("contracts")
+          .createSignedUrl(p, 3600);
+        return { path: p, url: s?.signedUrl ?? null };
+      })
+    );
+    for (const sr of signResults) {
+      if (sr.url) signedMap[sr.path] = sr.url;
+    }
+  }
+
   const payments: PaymentRow[] = (rows ?? []).map((r) => {
     const row = r as unknown as Row;
     const bill = asArr(row.bill)[0] as
@@ -146,6 +168,7 @@ export async function GET(req: NextRequest) {
       method: row.method,
       notes: row.notes,
       ai_recognized: !!row.ai_recognized,
+      screenshot_signed_url: row.screenshot_url ? signedMap[row.screenshot_url] ?? null : null,
       property_name: propRow?.name ?? "—",
       property_address: propRow?.address ?? null,
       primary_tenant_name: (primaryName as { name?: string } | undefined)?.name ?? null,

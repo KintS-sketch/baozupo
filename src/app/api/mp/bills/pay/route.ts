@@ -45,13 +45,15 @@ export async function POST(req: NextRequest) {
     paid_at?: string;
     method?: string;
     notes?: string;
+    /** 转账截图在 contracts bucket 内的相对路径（来自 /api/mp/payments/upload-screenshot） */
+    screenshot_url?: string;
   };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "请求体不是 JSON" }, { status: 400 });
   }
-  const { bill_id, amount, paid_at, method, notes } = body;
+  const { bill_id, amount, paid_at, method, notes, screenshot_url } = body;
   if (!bill_id) return NextResponse.json({ error: "bill_id 不能为空" }, { status: 400 });
   if (!amount || amount <= 0)
     return NextResponse.json({ error: "amount 必须 > 0" }, { status: 400 });
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
       paid_at,
       method,
       notes: notes || null,
+      screenshot_url: screenshot_url?.trim() || null,
     });
     if (payErr) throw payErr;
 
