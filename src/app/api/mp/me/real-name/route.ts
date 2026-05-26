@@ -41,12 +41,13 @@ export async function POST(req: NextRequest) {
   });
 
   try {
+    // 用 upsert：万一 trigger 没建 user_profiles 行也能兜底
+    // （之前改昵称遇到同样问题：update 影响 0 行会静默成功，前端 reload 后看不到新值）
     const { error } = await admin
       .from("user_profiles")
-      .update({ real_name: name, id_number: id })
-      .eq("id", user.id);
+      .upsert({ id: user.id, real_name: name, id_number: id }, { onConflict: "id" });
     if (error) throw error;
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, real_name: name, id_number: id });
   } catch (err) {
     console.error("[api/mp/me/real-name] fail", err);
     return NextResponse.json(
