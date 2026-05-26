@@ -481,7 +481,7 @@ export default function LoginPage() {
 
       {/* 注册独立浮层 —— 视觉上跟登录卡片区分开 */}
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
-        <DialogContent className="sm:max-w-md bg-gradient-to-br from-primary-soft/60 via-background to-background border-primary/20">
+        <DialogContent className="sm:max-w-md bg-background border-primary/20">
           <DialogHeader>
             <div className="flex items-center justify-center mb-2">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-white shadow-soft-md">
