@@ -10,6 +10,7 @@ import {
   Phone,
   Sparkles,
   X,
+  Lock,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -32,32 +33,33 @@ type AuthMethod = "phone" | "email";
 // ====================================================================
 // PWA 登录页
 //
-// 设计原则：
-//   - 手机号 / 邮箱 两个 tab，都走 OTP 验证码流程（无密码）
-//   - 邮箱模式：默认显示登录，下方有「新用户邮箱注册」按钮 → 打开独立弹窗
-//   - 输入框 / 按钮统一 h-11，避免文字被裁切
+// 设计：
+//   - 手机号 tab：OTP 验证码登录（无密码，自动注册）
+//   - 邮箱 tab：传统 邮箱 + 密码 登录（不发验证码）
+//   - 注册新账号：点「立即注册」打开浮层 → 邮箱 + 验证码 + 设置密码 + 重复密码
+//   - 输入框 / 按钮统一 h-11
 // ====================================================================
 export default function LoginPage() {
   const [method, setMethod] = useState<AuthMethod>("phone");
 
-  // 手机号验证码态
+  // 手机号验证码
   const [phone, setPhone] = useState("");
   const [phoneOtp, setPhoneOtp] = useState("");
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneOtpSending, setPhoneOtpSending] = useState(false);
   const [phoneOtpCooldown, setPhoneOtpCooldown] = useState(0);
 
-  // 邮箱验证码态（登录 + 注册共用一套字段）
+  // 邮箱密码登录
   const [email, setEmail] = useState("");
-  const [emailOtp, setEmailOtp] = useState("");
+  const [password, setPassword] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
-  const [emailOtpSending, setEmailOtpSending] = useState(false);
-  const [emailOtpCooldown, setEmailOtpCooldown] = useState(0);
 
   // 注册弹窗
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerOtp, setRegisterOtp] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState("");
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerOtpSending, setRegisterOtpSending] = useState(false);
   const [registerOtpCooldown, setRegisterOtpCooldown] = useState(0);
@@ -67,16 +69,15 @@ export default function LoginPage() {
 
   // 统一倒计时
   useEffect(() => {
-    if (phoneOtpCooldown <= 0 && emailOtpCooldown <= 0 && registerOtpCooldown <= 0) return;
+    if (phoneOtpCooldown <= 0 && registerOtpCooldown <= 0) return;
     cooldownTimer.current = setTimeout(() => {
       setPhoneOtpCooldown((s) => (s > 0 ? s - 1 : 0));
-      setEmailOtpCooldown((s) => (s > 0 ? s - 1 : 0));
       setRegisterOtpCooldown((s) => (s > 0 ? s - 1 : 0));
     }, 1000);
     return () => {
       if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
     };
-  }, [phoneOtpCooldown, emailOtpCooldown, registerOtpCooldown]);
+  }, [phoneOtpCooldown, registerOtpCooldown]);
 
   // ============ 手机号验证码 ============
   const handleSendPhoneOtp = async () => {
@@ -152,84 +153,67 @@ export default function LoginPage() {
     }
   };
 
-  // ============ 邮箱验证码（登录） ============
-  const handleSendEmailOtp = async (mode: "login" | "register") => {
-    const targetEmail = mode === "login" ? email : registerEmail;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
-      toast.error("请输入正确的邮箱");
-      return;
-    }
-    const setSending = mode === "login" ? setEmailOtpSending : setRegisterOtpSending;
-    const setCooldown = mode === "login" ? setEmailOtpCooldown : setRegisterOtpCooldown;
-    setSending(true);
-    try {
-      const res = await fetch("/api/auth/send-email-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: targetEmail, purpose: mode }),
-      });
-      const json = (await res.json()) as { success: boolean; error?: string; needs_config?: boolean };
-      if (!json.success) {
-        if (json.needs_config) {
-          toast.error("邮箱验证码功能尚未启用，请用手机号登录");
-        } else {
-          toast.error(json.error ?? "发送失败");
-        }
-        return;
-      }
-      toast.success("验证码已发送，请查收邮箱（含垃圾邮件）");
-      setCooldown(60);
-    } catch {
-      toast.error("网络异常，请重试");
-    } finally {
-      setSending(false);
-    }
-  };
-
+  // ============ 邮箱 + 密码 登录 ============
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast.error("请输入正确的邮箱");
       return;
     }
-    if (!/^\d{6}$/.test(emailOtp)) {
-      toast.error("验证码需为 6 位数字");
+    if (!password) {
+      toast.error("请输入密码");
       return;
     }
     setEmailLoading(true);
     try {
-      const res = await fetch("/api/auth/verify-email-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code: emailOtp }),
-      });
-      const json = (await res.json()) as {
-        success: boolean;
-        error?: string;
-        is_new_user?: boolean;
-        access_token?: string;
-        refresh_token?: string;
-      };
-      if (!json.success || !json.access_token || !json.refresh_token) {
-        toast.error(json.error ?? "登录失败");
-        return;
-      }
       const supabase = createClient();
-      const { error: setErr } = await supabase.auth.setSession({
-        access_token: json.access_token,
-        refresh_token: json.refresh_token,
-      });
-      if (setErr) {
-        toast.error("会话建立失败：" + setErr.message);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          toast.error("邮箱或密码错误");
+        } else {
+          toast.error(error.message);
+        }
         return;
       }
-      toast.success(json.is_new_user ? "欢迎使用养房 Tend！" : "登录成功");
+      toast.success("登录成功");
       router.push("/");
       router.refresh();
     } catch {
       toast.error("网络异常，请重试");
     } finally {
       setEmailLoading(false);
+    }
+  };
+
+  // ============ 注册：邮箱 + 验证码 + 密码 ============
+  const handleSendRegisterOtp = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerEmail)) {
+      toast.error("请输入正确的邮箱");
+      return;
+    }
+    setRegisterOtpSending(true);
+    try {
+      const res = await fetch("/api/auth/send-email-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: registerEmail, purpose: "register" }),
+      });
+      const json = (await res.json()) as { success: boolean; error?: string; needs_config?: boolean };
+      if (!json.success) {
+        if (json.needs_config) {
+          toast.error("邮箱验证码功能尚未启用，请用手机号注册");
+        } else {
+          toast.error(json.error ?? "发送失败");
+        }
+        return;
+      }
+      toast.success("验证码已发送，请查收邮箱（含垃圾邮件夹）");
+      setRegisterOtpCooldown(60);
+    } catch {
+      toast.error("网络异常，请重试");
+    } finally {
+      setRegisterOtpSending(false);
     }
   };
 
@@ -243,17 +227,28 @@ export default function LoginPage() {
       toast.error("验证码需为 6 位数字");
       return;
     }
+    if (registerPassword.length < 6) {
+      toast.error("密码至少需要 6 位");
+      return;
+    }
+    if (registerPassword !== registerPasswordConfirm) {
+      toast.error("两次输入的密码不一致");
+      return;
+    }
     setRegisterLoading(true);
     try {
-      const res = await fetch("/api/auth/verify-email-otp", {
+      const res = await fetch("/api/auth/email-otp-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: registerEmail, code: registerOtp }),
+        body: JSON.stringify({
+          email: registerEmail,
+          code: registerOtp,
+          password: registerPassword,
+        }),
       });
       const json = (await res.json()) as {
         success: boolean;
         error?: string;
-        is_new_user?: boolean;
         access_token?: string;
         refresh_token?: string;
       };
@@ -270,9 +265,7 @@ export default function LoginPage() {
         toast.error("会话建立失败：" + setErr.message);
         return;
       }
-      toast.success(
-        json.is_new_user ? "🎉 注册成功，欢迎使用养房 Tend！" : "该邮箱已注册，已为你直接登录"
-      );
+      toast.success("🎉 注册成功，欢迎使用养房 Tend！");
       setRegisterOpen(false);
       router.push("/");
       router.refresh();
@@ -418,7 +411,7 @@ export default function LoginPage() {
                   <div className="flex-1">
                     <CardTitle>邮箱登录</CardTitle>
                     <CardDescription className="mt-0.5">
-                      用验证码登录，无需密码
+                      用注册时设置的密码登录
                     </CardDescription>
                   </div>
                 </div>
@@ -439,31 +432,17 @@ export default function LoginPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email-otp">邮箱验证码</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="email-otp"
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={6}
-                        placeholder="6 位数字"
-                        value={emailOtp}
-                        onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ""))}
-                        autoComplete="one-time-code"
-                        required
-                        className="h-11 flex-1 font-mono tracking-widest text-base"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => handleSendEmailOtp("login")}
-                        disabled={emailOtpSending || emailOtpCooldown > 0 || !email}
-                        className="shrink-0 w-28 h-11"
-                      >
-                        {emailOtpSending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                        {emailOtpCooldown > 0 ? `${emailOtpCooldown}s` : "获取验证码"}
-                      </Button>
-                    </div>
+                    <Label htmlFor="password">密码</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="至少 6 位"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      required
+                      className="h-11 text-base"
+                    />
                   </div>
                   <Button type="submit" className="w-full h-11" disabled={emailLoading}>
                     {emailLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -500,7 +479,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* 注册独立弹窗 —— 视觉上跟登录卡片区分开 */}
+      {/* 注册独立浮层 —— 视觉上跟登录卡片区分开 */}
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
         <DialogContent className="sm:max-w-md bg-gradient-to-br from-primary-soft/60 via-background to-background border-primary/20">
           <DialogHeader>
@@ -511,10 +490,10 @@ export default function LoginPage() {
             </div>
             <DialogTitle className="text-center text-xl">注册新账号</DialogTitle>
             <DialogDescription className="text-center">
-              无需密码，邮箱验证码激活即可使用
+              邮箱验证后设置密码，下次直接邮箱+密码登录
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleRegisterSubmit} className="space-y-4 mt-2">
+          <form onSubmit={handleRegisterSubmit} className="space-y-3.5 mt-2">
             <div className="space-y-2">
               <Label htmlFor="register-email">邮箱</Label>
               <Input
@@ -546,7 +525,7 @@ export default function LoginPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => handleSendEmailOtp("register")}
+                  onClick={handleSendRegisterOtp}
                   disabled={registerOtpSending || registerOtpCooldown > 0 || !registerEmail}
                   className="shrink-0 w-28 h-11"
                 >
@@ -555,19 +534,35 @@ export default function LoginPage() {
                 </Button>
               </div>
             </div>
-            <div className="bg-white/60 rounded-lg p-3 space-y-1.5 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                <span>免费使用核心功能</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                <span>1 分钟完成注册，不留密码</span>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="register-password">设置密码</Label>
+              <Input
+                id="register-password"
+                type="password"
+                placeholder="至少 6 位"
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+                className="h-11 text-base"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="register-password-confirm">重复密码</Label>
+              <Input
+                id="register-password-confirm"
+                type="password"
+                placeholder="再输一次密码"
+                value={registerPasswordConfirm}
+                onChange={(e) => setRegisterPasswordConfirm(e.target.value)}
+                autoComplete="new-password"
+                required
+                className="h-11 text-base"
+              />
             </div>
             <Button type="submit" className="w-full h-11" disabled={registerLoading}>
               {registerLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Sparkles className="mr-2 h-4 w-4" /> 立即注册
+              <Lock className="mr-2 h-4 w-4" /> 提交注册
             </Button>
             <button
               type="button"
