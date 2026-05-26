@@ -91,7 +91,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select(
       `id, household_id, start_date, end_date,
        monthly_rent, deposit, rent_due_day, payment_cycle, rental_source,
-       property:properties(name, address, area_sqm),
+       property:properties(name, address, area_sqm:area),
        lease_tenants(is_primary, tenant:tenants(id, name, phone, id_number))`
     )
     .eq("id", leaseId)
@@ -99,7 +99,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .single();
 
   if (leaseErr || !leaseRaw) {
-    return NextResponse.json({ success: false, error: "租约不存在" }, { status: 404 });
+    console.error("[api/mp/contracts/create] lease query fail", leaseErr, leaseId);
+    return NextResponse.json(
+      {
+        success: false,
+        error: leaseErr?.message
+          ? `查询租约失败：${leaseErr.message}`
+          : "租约不存在",
+      },
+      { status: 404 }
+    );
   }
   const lease = normalizeLease(leaseRaw as Record<string, unknown>);
   if (lease.household_id !== user.household_id) {

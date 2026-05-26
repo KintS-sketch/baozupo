@@ -64,7 +64,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       id, household_id, property_id, start_date, end_date,
       monthly_rent, deposit, rent_due_day, payment_cycle,
       rental_source, agent_name, agent_phone, agent_fee,
-      property:properties(name, address, area_sqm),
+      property:properties(name, address, area_sqm:area),
       lease_tenants(is_primary, tenant:tenants(id, name, phone, id_number))
     `)
     .eq("id", leaseId)
