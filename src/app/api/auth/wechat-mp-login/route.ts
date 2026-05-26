@@ -136,6 +136,7 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   let userId: string;
+  let isNewUser = false;
 
   if (existingProfile) {
     userId = existingProfile.id;
@@ -147,6 +148,7 @@ export async function POST(req: Request) {
         .eq("id", userId);
     }
   } else {
+    isNewUser = true;
     // 4. 创建新 auth 用户
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email: fakeEmail,
@@ -229,6 +231,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     success: true,
+    is_new_user: isNewUser,
     access_token: sessionData.session.access_token,
     refresh_token: sessionData.session.refresh_token,
     expires_at: sessionData.session.expires_at,
