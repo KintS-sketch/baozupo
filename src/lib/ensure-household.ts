@@ -22,6 +22,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getPrimaryHouseholdId } from "@/lib/get-primary-household";
 
 const DEFAULT_HOUSEHOLD_NAME = "我的家庭组";
 
@@ -29,21 +30,10 @@ export async function ensureHousehold(
   admin: SupabaseClient,
   userId: string
 ): Promise<string> {
-  // 1) 已是某家庭组成员？
-  // 注意：一个 user 可能在多个 household 里（0009 的 unique 是 (user_id, household_id) 复合键）
-  // 所以这里用 limit(1) 取第一个，而不是 maybeSingle()（多行会报错 "JSON object requested, multiple..."）
-  const { data: memberRows, error: memErr } = await admin
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", userId)
-    .limit(1);
-
-  if (memErr) {
-    console.error("[ensureHousehold] query members fail", memErr, { userId });
-    throw new Error(`查询家庭组成员失败：${memErr.message}`);
-  }
-  if (memberRows && memberRows.length > 0 && memberRows[0].household_id) {
-    return memberRows[0].household_id;
+  // 1) 已是某家庭组成员？（优先 owner 角色）
+  const existing = await getPrimaryHouseholdId(admin, userId);
+  if (existing) {
+    return existing;
   }
 
   // 2) 有孤儿 household？（owner_id = userId 但没建 member）

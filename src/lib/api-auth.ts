@@ -10,6 +10,7 @@
 
 import type { NextRequest } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { getPrimaryHouseholdId } from "@/lib/get-primary-household";
 
 export interface ApiUser {
   id: string;
@@ -62,13 +63,10 @@ export async function getUserFromBearer(
   const admin = createSupabaseClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data: member } = await admin
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", data.user.id)
-    .maybeSingle();
+  // 用 getPrimaryHouseholdId 取主家庭组（owner 优先），不会被多行查询报错
+  const household_id = await getPrimaryHouseholdId(admin, data.user.id);
 
-  if (!member?.household_id) {
+  if (!household_id) {
     console.warn("[api-auth] user has no household", data.user.id);
     // 返回 user 但 household_id 为空字符串，调用方按需处理
     return {
@@ -83,7 +81,7 @@ export async function getUserFromBearer(
     id: data.user.id,
     email: data.user.email,
     phone: data.user.phone,
-    household_id: member.household_id,
+    household_id,
   };
 }
 

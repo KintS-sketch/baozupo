@@ -22,6 +22,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
+import { getPrimaryHouseholdId } from "@/lib/get-primary-household";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,18 +178,14 @@ export async function POST(req: Request) {
   }
 
   // 7. 查 household_id
-  const { data: member } = await admin
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const household_id = await getPrimaryHouseholdId(admin, userId);
 
   return NextResponse.json({
     success: true,
     access_token: sessionData.session.access_token,
     refresh_token: sessionData.session.refresh_token,
     expires_at: sessionData.session.expires_at,
-    household_id: member?.household_id ?? null,
+    household_id,
     user: {
       id: userId,
       email,

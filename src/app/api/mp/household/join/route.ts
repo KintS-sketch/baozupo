@@ -63,11 +63,13 @@ export async function POST(req: NextRequest) {
   }
 
   // 检查用户是否已经是别的 household 的成员（每个用户当前只能在一个 household）
-  const { data: anyMember } = await admin
+  // 用 limit(1) 而不是 maybeSingle（多行会报 JSON 错）
+  const { data: anyMembers } = await admin
     .from("household_members")
     .select("id, household_id")
     .eq("user_id", user.id)
-    .maybeSingle();
+    .limit(1);
+  const anyMember = anyMembers && anyMembers.length > 0 ? anyMembers[0] : null;
   if (anyMember) {
     return NextResponse.json(
       { error: "你当前已在其他家庭组，无法加入新组（请先在网页版退出当前组）" },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAnonClient } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getPrimaryHouseholdId } from "@/lib/get-primary-household";
 
 export const runtime = "nodejs";
 
@@ -61,11 +62,7 @@ export async function POST(req: Request) {
   }
 
   const admin = createServiceClient();
-  const { data: member } = await admin
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", loginData.user!.id)
-    .maybeSingle();
+  const household_id = await getPrimaryHouseholdId(admin, loginData.user!.id);
 
   return NextResponse.json({
     success: true,
@@ -77,7 +74,7 @@ export async function POST(req: Request) {
       email: loginData.user!.email,
       phone: loginData.user!.phone,
     },
-    household_id: member?.household_id ?? null,
+    household_id,
     signup_user_id: signUpData.user?.id ?? null,
   });
 }

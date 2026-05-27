@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAnonClient } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getPrimaryHouseholdId } from "@/lib/get-primary-household";
 
 export const runtime = "nodejs";
 
@@ -55,11 +56,7 @@ export async function POST(req: Request) {
 
   // 查 household_id（service_role 绕开 RLS）
   const admin = createServiceClient();
-  const { data: member } = await admin
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", data.user.id)
-    .maybeSingle();
+  const household_id = await getPrimaryHouseholdId(admin, data.user.id);
 
   return NextResponse.json({
     success: true,
@@ -71,6 +68,6 @@ export async function POST(req: Request) {
       email: data.user.email,
       phone: data.user.phone,
     },
-    household_id: member?.household_id ?? null,
+    household_id,
   });
 }
