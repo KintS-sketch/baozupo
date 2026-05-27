@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createHmac } from "crypto";
+import { ensureHousehold } from "@/lib/ensure-household";
 
 export const runtime = "nodejs";
 
@@ -182,21 +183,26 @@ export async function POST(req: Request) {
       console.warn("[wechat-mp-login] update profile fail", updateProfErr);
     }
 
-    // 6. 自动建 household + member（首次登录就有家庭组可用）
-    const { data: household, error: hhErr } = await admin
-      .from("households")
-      .insert({ name: "我的家庭组", owner_id: userId })
-      .select("id")
-      .single();
-    if (hhErr || !household) {
-      console.warn("[wechat-mp-login] create household fail", hhErr);
-    } else {
-      await admin.from("household_members").insert({
-        household_id: household.id,
-        user_id: userId,
-        role: "owner",
-      });
-    }
+    // 6. household + member 由 ensureHousehold 兜底（既有/孤儿/全新 都能处理）
+    //    这里不再 explicit insert，避免 unique 约束冲突时静默失败
+  }
+
+  // 兜底：保证用户一定有 household_id（不管是 trigger 建的、孤儿、还是全新）
+  let householdId: string;
+  try {
+    householdId = await ensureHousehold(admin, userId);
+  } catch (err) {
+    console.error("[wechat-mp-login] ensureHousehold fail", err, { userId });
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          err instanceof Error
+            ? `家庭组初始化失败：${err.message}`
+            : "家庭组初始化失败",
+      },
+      { status: 500 }
+    );
   }
 
   // 7. 颁发 session（signInWithPassword）
@@ -215,19 +221,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // 8. 查 household_id + display_name 返回给前端
-  const [{ data: member }, { data: profileForReturn }] = await Promise.all([
-    admin
-      .from("household_members")
-      .select("household_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
-    admin
-      .from("user_profiles")
-      .select("display_name")
-      .eq("id", userId)
-      .maybeSingle(),
-  ]);
+  // 8. 查 display_name 返回给前端（household_id 已由 ensureHousehold 保证非空）
+  const { data: profileForReturn } = await admin
+    .from("user_profiles")
+    .select("display_name")
+    .eq("id", userId)
+    .maybeSingle();
 
   return NextResponse.json({
     success: true,
@@ -235,7 +234,7 @@ export async function POST(req: Request) {
     access_token: sessionData.session.access_token,
     refresh_token: sessionData.session.refresh_token,
     expires_at: sessionData.session.expires_at,
-    household_id: member?.household_id ?? null,
+    household_id: householdId,
     user: {
       id: userId,
       email: sessionData.user?.email ?? fakeEmail,

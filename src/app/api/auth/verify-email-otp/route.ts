@@ -22,6 +22,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createHash, createHmac } from "crypto";
+import { ensureHousehold } from "@/lib/ensure-household";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -169,6 +170,24 @@ export async function POST(req: Request) {
     }
   }
 
+  // 兜底：保证用户一定有 household_id（防御 0017 trigger 未生效）
+  let householdId: string;
+  try {
+    householdId = await ensureHousehold(admin, userId);
+  } catch (err) {
+    console.error("[verify-email-otp] ensureHousehold fail", err, { userId });
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          err instanceof Error
+            ? `家庭组初始化失败：${err.message}`
+            : "家庭组初始化失败",
+      },
+      { status: 500 }
+    );
+  }
+
   // 颁发 session
   const { data: sessionData, error: signErr } = await anon.auth.signInWithPassword({
     email,
@@ -182,19 +201,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // 查 household_id + profile
-  const [{ data: member }, { data: profile }] = await Promise.all([
-    admin
-      .from("household_members")
-      .select("household_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
-    admin
-      .from("user_profiles")
-      .select("display_name, phone, email")
-      .eq("id", userId)
-      .maybeSingle(),
-  ]);
+  // 查 profile 返回（household_id 已由 ensureHousehold 保证）
+  const { data: profile } = await admin
+    .from("user_profiles")
+    .select("display_name, phone, email")
+    .eq("id", userId)
+    .maybeSingle();
 
   return NextResponse.json({
     success: true,
@@ -202,7 +214,7 @@ export async function POST(req: Request) {
     access_token: sessionData.session.access_token,
     refresh_token: sessionData.session.refresh_token,
     expires_at: sessionData.session.expires_at,
-    household_id: member?.household_id ?? null,
+    household_id: householdId,
     user: {
       id: userId,
       email: profile?.email ?? email,
