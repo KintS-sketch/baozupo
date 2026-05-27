@@ -30,26 +30,28 @@ export async function ensureHousehold(
   userId: string
 ): Promise<string> {
   // 1) 已是某家庭组成员？
-  const { data: existingMember, error: memErr } = await admin
+  // 注意：一个 user 可能在多个 household 里（0009 的 unique 是 (user_id, household_id) 复合键）
+  // 所以这里用 limit(1) 取第一个，而不是 maybeSingle()（多行会报错 "JSON object requested, multiple..."）
+  const { data: memberRows, error: memErr } = await admin
     .from("household_members")
     .select("household_id")
     .eq("user_id", userId)
-    .maybeSingle();
+    .limit(1);
 
   if (memErr) {
     console.error("[ensureHousehold] query members fail", memErr, { userId });
     throw new Error(`查询家庭组成员失败：${memErr.message}`);
   }
-  if (existingMember?.household_id) {
-    return existingMember.household_id;
+  if (memberRows && memberRows.length > 0 && memberRows[0].household_id) {
+    return memberRows[0].household_id;
   }
 
   // 2) 有孤儿 household？（owner_id = userId 但没建 member）
-  const { data: orphanHh, error: orphanErr } = await admin
+  const { data: hhRows, error: orphanErr } = await admin
     .from("households")
     .select("id")
     .eq("owner_id", userId)
-    .maybeSingle();
+    .limit(1);
 
   if (orphanErr) {
     console.error("[ensureHousehold] query orphan household fail", orphanErr, {
@@ -57,6 +59,7 @@ export async function ensureHousehold(
     });
     throw new Error(`查询家庭组失败：${orphanErr.message}`);
   }
+  const orphanHh = hhRows && hhRows.length > 0 ? hhRows[0] : null;
 
   let householdId: string;
   if (orphanHh?.id) {
@@ -71,11 +74,12 @@ export async function ensureHousehold(
 
     if (createErr || !created) {
       // 可能并发竞争（trigger 同时建了）→ 再查一次孤儿
-      const { data: retry } = await admin
+      const { data: retryRows } = await admin
         .from("households")
         .select("id")
         .eq("owner_id", userId)
-        .maybeSingle();
+        .limit(1);
+      const retry = retryRows && retryRows.length > 0 ? retryRows[0] : null;
       if (!retry?.id) {
         console.error("[ensureHousehold] create household fail", createErr, {
           userId,
@@ -98,11 +102,13 @@ export async function ensureHousehold(
   if (insMemErr) {
     // 可能 trigger 已建（household_members_user_household_unique 冲突）— 当成功处理
     // 再查一次确认确实存在
-    const { data: confirmMember } = await admin
+    const { data: confirmRows } = await admin
       .from("household_members")
       .select("household_id")
       .eq("user_id", userId)
-      .maybeSingle();
+      .limit(1);
+    const confirmMember =
+      confirmRows && confirmRows.length > 0 ? confirmRows[0] : null;
     if (!confirmMember?.household_id) {
       console.error("[ensureHousehold] insert member fail", insMemErr, {
         userId,
