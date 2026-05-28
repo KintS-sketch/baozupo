@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import crypto from "node:crypto";
 import { generateInitialPdf } from "./pdf-generator";
+import { generatePublicToken } from "./tokens";
 
 // 项目暂无生成的 Database 类型，用 any 让 .from(...).insert(...) 接受未声明的列
 // （契合 src/lib/supabase/service.ts 的写法）。
@@ -168,7 +169,7 @@ export async function createBrokerContractGroup(
         name: primaryTenant.name,
         phone: primaryTenant.phone,
         id_number: primaryTenant.id_number,
-        public_token: crypto.randomUUID(),
+        public_token: generatePublicToken(),
       },
       // 居间协议 B
       {
@@ -187,7 +188,7 @@ export async function createBrokerContractGroup(
         name: lease.agent_name,
         phone: lease.agent_phone,
         id_number: null, // 中介签字时自填
-        public_token: crypto.randomUUID(),
+        public_token: generatePublicToken(),
       },
     ]);
     if (signersErr) throw new Error(`创建签字人失败：${signersErr.message}`);
