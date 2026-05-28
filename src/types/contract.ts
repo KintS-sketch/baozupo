@@ -4,7 +4,7 @@
  */
 
 export type ContractStatus = "draft" | "partial" | "signed" | "void" | "expired";
-export type ContractTemplateType = "direct" | "agent";
+export type ContractTemplateType = "direct" | "agent" | "broker";
 export type SignerRole = "landlord" | "agent" | "tenant" | "broker";
 
 export interface Contract {

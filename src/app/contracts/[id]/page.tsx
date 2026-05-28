@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, use, useCallback } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SignProgress } from "@/components/contracts/sign-progress";
 import { PdfPreview } from "@/components/contracts/pdf-preview";
 import { Loader2, Download, RefreshCw, CheckCircle2, Clock, FileSignature } from "lucide-react";
 import { toast } from "sonner";
-import type { Contract, SignerRole } from "@/types/contract";
+import type { Contract, SignerRole, ContractTemplateType, ContractStatus } from "@/types/contract";
 
 interface PublicSigner {
   id: string;
@@ -18,6 +19,19 @@ interface PublicSigner {
   signed_at: string | null;
   sign_ip: string | null;
   sms_verified_at: string | null;
+}
+
+interface GroupContractPeer {
+  id: string;
+  template_type: ContractTemplateType;
+  status: ContractStatus;
+  pdf_initial_path: string | null;
+  pdf_final_path: string | null;
+}
+
+function tabLabel(type: ContractTemplateType): string {
+  if (type === "broker") return "居间服务协议";
+  return "租赁合同";
 }
 
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {
@@ -36,6 +50,7 @@ export default function ContractDetailPage({
   const { id } = use(params);
   const [contract, setContract] = useState<Contract | null>(null);
   const [signers, setSigners] = useState<PublicSigner[]>([]);
+  const [groupContracts, setGroupContracts] = useState<GroupContractPeer[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -46,6 +61,7 @@ export default function ContractDetailPage({
       if (j.success) {
         setContract(j.contract);
         setSigners(j.signers ?? []);
+        setGroupContracts(j.group_contracts ?? []);
       } else {
         toast.error(j.error ?? "加载失败");
       }
@@ -80,6 +96,15 @@ export default function ContractDetailPage({
   const isSigned = contract.status === "signed";
   const isPending = contract.status === "draft" || contract.status === "partial";
 
+  const hasGroup = groupContracts.length > 0;
+  const peer = hasGroup ? groupContracts[0] : null;
+  const bothCompleted = !!(
+    hasGroup &&
+    peer &&
+    contract.status === "signed" &&
+    peer.status === "signed"
+  );
+
   return (
     <div className="max-w-2xl mx-auto p-4 pb-12 space-y-4">
       {/* 顶部状态 */}
@@ -92,6 +117,35 @@ export default function ContractDetailPage({
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* 合同组 tab 切换 + 整体进度（仅中介居间模式显示）*/}
+      {hasGroup && peer && (
+        <div className="border-b">
+          <div className="flex">
+            <button
+              type="button"
+              className="px-4 py-2 border-b-2 border-primary font-bold text-sm"
+              disabled
+            >
+              {tabLabel(contract.template_type)}{" "}
+              {contract.status === "signed" ? "✓" : "·"} 当前
+            </button>
+            <Link
+              href={`/contracts/${peer.id}`}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              {tabLabel(peer.template_type)}{" "}
+              {peer.status === "signed" ? "✓" : "·"} 切换
+            </Link>
+          </div>
+          <div className="text-xs text-muted-foreground py-2">
+            本合同属于「中介居间」合同组，共 2 份合同。状态：
+            <span className="ml-2 font-bold">
+              {bothCompleted ? "✅ 全部签订完成" : "⏳ 进行中"}
+            </span>
+          </div>
+        </div>
+      )}
 
       <Card className="p-4 space-y-2">
         <div className="flex items-center gap-2">
