@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createBrokerContractGroup } from "@/lib/econtract/create-group";
 import { generateInitialPdf } from "@/lib/econtract/pdf-generator";
 import { generatePublicToken } from "@/lib/econtract/tokens";
 
@@ -136,15 +137,47 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  // ===== 6. 决定模板 =====
-  const templateType = lease.rental_source === "agent" ? "agent" : "direct";
-  if (templateType === "agent") {
-    // Task 16 实现 agent 模板
-    return NextResponse.json(
-      { success: false, error: "中介居间模式正在开发中" },
-      { status: 501 }
-    );
+  // ===== 6. 决定流程 =====
+  // 中介模式 → 调用 createBrokerContractGroup，生成两份合同
+  if (lease.rental_source === "agent") {
+    try {
+      const result = await createBrokerContractGroup({
+        admin: supabase,
+        lease: {
+          id: lease.id,
+          household_id: lease.household_id,
+          start_date: lease.start_date,
+          end_date: lease.end_date,
+          monthly_rent: Number(lease.monthly_rent),
+          deposit: Number(lease.deposit ?? 0),
+          rent_due_day: Number(lease.rent_due_day ?? 5),
+          payment_cycle: lease.payment_cycle ?? "monthly",
+          agent_name: lease.agent_name ?? "",
+          agent_phone: lease.agent_phone ?? "",
+          agent_fee: Number(lease.agent_fee ?? 0),
+          property: {
+            name: lease.property?.name ?? "—",
+            address: lease.property?.address ?? "",
+            area_sqm: lease.property?.area_sqm ?? null,
+            city: null,
+          },
+        },
+        landlord: { name: landlordName, phone: landlordPhone, id_number: landlordId },
+        primaryTenant: {
+          name: primaryTenant.name,
+          phone: primaryTenant.phone,
+          id_number: primaryTenant.id_number ?? "",
+        },
+      });
+      return NextResponse.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
   }
+
+  // 直租模式 → 走原来的流程
+  const templateType: "direct" = "direct";
 
   // ===== 7. 创建 contract 行 =====
   const { data: contract, error: contractErr } = await supabase
