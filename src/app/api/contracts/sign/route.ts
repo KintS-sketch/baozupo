@@ -36,6 +36,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     public_token?: string;
     sms_code?: string;
     signature_image?: string;
+    id_number?: string;
   };
   try {
     body = await req.json();
@@ -49,7 +50,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       { status: 400 }
     );
   }
-  if (!["landlord", "agent", "tenant"].includes(role)) {
+  if (!["landlord", "agent", "tenant", "broker"].includes(role)) {
     return NextResponse.json({ success: false, error: "非法 role" }, { status: 400 });
   }
 
@@ -83,6 +84,36 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   if (signer.signed_at) {
     return NextResponse.json({ success: false, error: "您已签字" }, { status: 409 });
+  }
+
+  // ===== Broker 首次签字时强制填身份证号 =====
+  if (signer.role === "broker" && !signer.id_number) {
+    const id = String(body.id_number ?? "").trim().toUpperCase();
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "请先填写身份证号", code: "ID_NUMBER_REQUIRED" },
+        { status: 400 }
+      );
+    }
+    if (!/^\d{17}[\dX]$/.test(id)) {
+      return NextResponse.json(
+        { success: false, error: "身份证号格式不正确（需 18 位）" },
+        { status: 400 }
+      );
+    }
+    // 在表里更新 signer.id_number（一次性写入，下次不再要求）
+    const { error: updErr } = await supabase
+      .from("contract_signers")
+      .update({ id_number: id })
+      .eq("id", signer.id);
+    if (updErr) {
+      return NextResponse.json(
+        { success: false, error: `保存身份证号失败：${updErr.message}` },
+        { status: 500 }
+      );
+    }
+    // 让后续流程能用到新值（虽然这里不再读 signer.id_number，但保留一致性）
+    signer.id_number = id;
   }
 
   // ===== 锁定检查 =====

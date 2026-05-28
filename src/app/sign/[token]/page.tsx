@@ -21,6 +21,7 @@ const ROLE_LABEL: Record<SignerRole, string> = {
   landlord: "房东",
   agent: "中介",
   tenant: "租客",
+  broker: "居间方",
 };
 
 export default function PublicSignPage({

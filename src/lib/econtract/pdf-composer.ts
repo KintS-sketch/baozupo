@@ -30,6 +30,7 @@ const ROLE_LABEL: Record<SignerRole, string> = {
   landlord: "Landlord",
   agent: "Agent",
   tenant: "Tenant",
+  broker: "Broker",
 };
 
 /**
@@ -57,6 +58,7 @@ export async function composeFinalPdf(opts: {
     landlord: { x: 200, y: pageH - 180, w: 180, h: 50 },
     agent:    { x: 200, y: pageH - 320, w: 180, h: 50 },
     tenant:   { x: 200, y: pageH - 460, w: 180, h: 50 },
+    broker:   { x: 200, y: pageH - 320, w: 180, h: 50 },
   };
 
   for (const s of opts.signers) {

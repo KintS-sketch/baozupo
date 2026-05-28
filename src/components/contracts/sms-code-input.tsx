@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 interface SmsCodeInputProps {
   contractId: string;
-  role: "landlord" | "agent" | "tenant";
+  role: "landlord" | "agent" | "tenant" | "broker";
   publicToken?: string;
   /** 6 位数字时回调 */
   onCodeReady: (code: string) => void;
