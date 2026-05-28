@@ -102,10 +102,29 @@ export async function GET(
     sms_verified_at: s.sms_verified_at,
   }));
 
+  // ===== 同组其他合同（用于 UI tab 展示）=====
+  let groupContracts: Array<{
+    id: string;
+    template_type: string;
+    status: string;
+    pdf_initial_path: string | null;
+    pdf_final_path: string | null;
+  }> = [];
+  if (contract.contract_group_id) {
+    const client = user ? supabase : createServiceClient();
+    const { data: peers } = await client
+      .from("contracts")
+      .select("id, template_type, status, pdf_initial_path, pdf_final_path")
+      .eq("contract_group_id", contract.contract_group_id)
+      .neq("id", contract.id);
+    if (peers) groupContracts = peers as typeof groupContracts;
+  }
+
   return NextResponse.json({
     success: true,
     contract,
     signers: publicSigners,
+    group_contracts: groupContracts,
   });
 }
 

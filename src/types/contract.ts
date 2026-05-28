@@ -22,6 +22,7 @@ export interface Contract {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  contract_group_id: string | null;
 }
 
 export interface ContractSigner {
