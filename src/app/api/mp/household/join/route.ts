@@ -62,19 +62,75 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "你已经是该家庭组的成员" }, { status: 409 });
   }
 
-  // 检查用户是否已经是别的 household 的成员（每个用户当前只能在一个 household）
-  // 用 limit(1) 而不是 maybeSingle（多行会报 JSON 错）
+  // 检查用户当前已在的 household 列表
+  // - 注册时 migration 0017 会自动建一个"我的家庭组"给每个新用户，所以单纯检查
+  //   是否有 member 记录会让"加入家人家庭组"永远失败
+  // - 改造：
+  //   1. 若当前 household 是"空壳"（无 properties / leases / tenants）→ 自动回收（删空 household
+  //      和对应 household_members）→ 让用户能加入新家庭组（典型场景：新用户注册后扫码加入老婆的家庭组）
+  //   2. 若当前 household 已有业务数据 → 报错引导清理（避免静默丢数据）
   const { data: anyMembers } = await admin
     .from("household_members")
     .select("id, household_id")
-    .eq("user_id", user.id)
-    .limit(1);
-  const anyMember = anyMembers && anyMembers.length > 0 ? anyMembers[0] : null;
-  if (anyMember) {
-    return NextResponse.json(
-      { error: "你当前已在其他家庭组，无法加入新组（请先在网页版退出当前组）" },
-      { status: 409 }
-    );
+    .eq("user_id", user.id);
+
+  if (anyMembers && anyMembers.length > 0) {
+    const currentHouseholdIds = anyMembers.map((m) => m.household_id);
+
+    // 数核心业务数据：properties + leases + tenants 三个有 household_id 字段且能代表"是否用过"
+    // bills / payments / meter_readings / form_invites 都依赖前三者，间接覆盖
+    const [propsRes, leasesRes, tenantsRes] = await Promise.all([
+      admin
+        .from("properties")
+        .select("id", { count: "exact", head: true })
+        .in("household_id", currentHouseholdIds),
+      admin
+        .from("leases")
+        .select("id", { count: "exact", head: true })
+        .in("household_id", currentHouseholdIds),
+      admin
+        .from("tenants")
+        .select("id", { count: "exact", head: true })
+        .in("household_id", currentHouseholdIds),
+    ]);
+
+    const propCount = propsRes.count ?? 0;
+    const leaseCount = leasesRes.count ?? 0;
+    const tenantCount = tenantsRes.count ?? 0;
+    const hasData = propCount + leaseCount + tenantCount > 0;
+
+    if (hasData) {
+      return NextResponse.json(
+        {
+          error: `你账号下已有数据（${propCount} 套房源 / ${leaseCount} 份租约 / ${tenantCount} 个租客），请先在「我的 → 家庭组」里清理或转移，再扫码加入新家庭组`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // 全空 → 安全回收：删 household_members + 孤立 household
+    for (const m of anyMembers) {
+      const { error: delMemberErr } = await admin
+        .from("household_members")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("household_id", m.household_id);
+      if (delMemberErr) {
+        return NextResponse.json(
+          { error: "切换家庭组失败：" + delMemberErr.message },
+          { status: 500 }
+        );
+      }
+
+      // 检查这个 household 是不是变空了，空就一并删
+      const { count: membersLeft } = await admin
+        .from("household_members")
+        .select("id", { count: "exact", head: true })
+        .eq("household_id", m.household_id);
+      if ((membersLeft ?? 0) === 0) {
+        await admin.from("households").delete().eq("id", m.household_id);
+      }
+    }
   }
 
   // 加入 household
