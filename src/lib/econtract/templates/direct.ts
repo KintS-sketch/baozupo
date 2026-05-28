@@ -19,6 +19,8 @@ export interface DirectTemplateData {
     rent_due_day: number;
     payment_cycle: string;     // monthly / quarterly / yearly
   };
+  /** 可选：当通过中介居间时，合同里要加一行介绍 */
+  broker?: { name: string; phone: string } | null;
   generated_at: string;        // ISO，合同生成时间
 }
 
@@ -99,6 +101,14 @@ export function renderDirectContract(
   doc.font("CJK").fontSize(10);
   doc.text("本合同履行过程中产生的争议，由双方友好协商解决；协商不成的，向房屋所在地人民法院起诉。");
   doc.moveDown(0.5);
+
+  // ===== 居间方信息（如有）=====
+  if (data.broker) {
+    doc.font("CJK-Bold").fontSize(12).text("居间方信息");
+    doc.font("CJK").fontSize(10);
+    doc.text(`本租赁合同由 ${data.broker.name}（${data.broker.phone}）居间介绍，居间费及双方权利义务详见《房屋租赁居间服务协议》。`);
+    doc.moveDown(0.5);
+  }
 
   // ===== 第七条 其他 =====
   doc.font("CJK-Bold").fontSize(12).text("第七条 其他约定");

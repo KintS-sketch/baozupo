@@ -19,6 +19,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getUserFromBearer } from "@/lib/api-auth";
+import { createBrokerContractGroup } from "@/lib/econtract/create-group";
 import { generateInitialPdf } from "@/lib/econtract/pdf-generator";
 import { generatePublicToken } from "@/lib/econtract/tokens";
 
@@ -38,6 +39,9 @@ interface LeaseRow {
   rent_due_day: number | null;
   payment_cycle: string | null;
   rental_source: string | null;
+  agent_name: string | null;
+  agent_phone: string | null;
+  agent_fee: number | string | null;
   property: { name: string; address: string | null; area_sqm: number | null } | null;
   lease_tenants: Array<{
     is_primary: boolean;
@@ -91,6 +95,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select(
       `id, household_id, start_date, end_date,
        monthly_rent, deposit, rent_due_day, payment_cycle, rental_source,
+       agent_name, agent_phone, agent_fee,
        property:properties(name, address, area_sqm:area),
        lease_tenants(is_primary, tenant:tenants(id, name, phone, id_number))`
     )
@@ -194,14 +199,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ===== 6. 模板 =====
-  const templateType = lease.rental_source === "agent" ? "agent" : "direct";
-  if (templateType === "agent") {
-    return NextResponse.json(
-      { success: false, error: "中介居间模式正在开发中" },
-      { status: 501 }
-    );
+  // ===== 6. 决定流程 =====
+  // 中介模式 → 调用 createBrokerContractGroup，生成两份合同
+  if (lease.rental_source === "agent") {
+    try {
+      const result = await createBrokerContractGroup({
+        admin,
+        lease: {
+          id: lease.id,
+          household_id: lease.household_id,
+          start_date: lease.start_date,
+          end_date: lease.end_date,
+          monthly_rent: Number(lease.monthly_rent),
+          deposit: Number(lease.deposit ?? 0),
+          rent_due_day: Number(lease.rent_due_day ?? 5),
+          payment_cycle: lease.payment_cycle ?? "monthly",
+          agent_name: lease.agent_name ?? "",
+          agent_phone: lease.agent_phone ?? "",
+          agent_fee: Number(lease.agent_fee ?? 0),
+          property: {
+            name: lease.property?.name ?? "—",
+            address: lease.property?.address ?? "",
+            area_sqm: lease.property?.area_sqm ?? null,
+            city: null,
+          },
+        },
+        landlord: { name: landlordName, phone: landlordPhone, id_number: landlordId },
+        primaryTenant: {
+          name: primaryTenant.name,
+          phone: primaryTenant.phone,
+          id_number: primaryTenant.id_number ?? "",
+        },
+      });
+      return NextResponse.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
   }
+
+  // 直租模式 → 走原来的流程
+  const templateType: "direct" = "direct";
 
   // ===== 7. 建 contract =====
   const { data: contract, error: contractErr } = await admin

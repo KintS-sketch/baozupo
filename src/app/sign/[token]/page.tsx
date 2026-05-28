@@ -21,6 +21,7 @@ const ROLE_LABEL: Record<SignerRole, string> = {
   landlord: "房东",
   agent: "中介",
   tenant: "租客",
+  broker: "居间方",
 };
 
 export default function PublicSignPage({
@@ -35,6 +36,7 @@ export default function PublicSignPage({
   const [agreed, setAgreed] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [smsCode, setSmsCode] = useState("");
+  const [idNumber, setIdNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [doneStatus, setDoneStatus] = useState<"partial" | "signed" | null>(null);
@@ -67,6 +69,12 @@ export default function PublicSignPage({
       toast.error("请输入 6 位短信验证码");
       return;
     }
+    if (info.role === "broker") {
+      if (!idNumber || !/^\d{17}[\dX]$/.test(idNumber)) {
+        toast.error("请填写正确的 18 位身份证号");
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const resp = await fetch("/api/contracts/sign", {
@@ -78,6 +86,7 @@ export default function PublicSignPage({
           public_token: token,
           sms_code: smsCode,
           signature_image: signature,
+          id_number: info.role === "broker" ? idNumber : undefined,
         }),
       });
       const j = await resp.json();
@@ -191,6 +200,26 @@ export default function PublicSignPage({
             disabled={submitting}
           />
         </div>
+
+        {info.role === "broker" && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              您的身份证号 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={idNumber}
+              onChange={(e) => setIdNumber(e.target.value.toUpperCase().trim())}
+              placeholder="18 位身份证号"
+              maxLength={18}
+              disabled={submitting}
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono tracking-wider"
+            />
+            <p className="text-xs text-muted-foreground">
+              居间方需提供真实身份证号以确保合同法律效力
+            </p>
+          </div>
+        )}
 
         <Button
           onClick={submit}
