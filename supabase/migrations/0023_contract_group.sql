@@ -20,7 +20,21 @@ ALTER TABLE public.contracts
 CREATE INDEX IF NOT EXISTS idx_contracts_group_id
   ON public.contracts(contract_group_id);
 
--- 2. contract_signers.role 加 'broker'
+-- 3. contracts.template_type 加 'broker'
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'contracts_template_type_check'
+  ) THEN
+    ALTER TABLE public.contracts DROP CONSTRAINT contracts_template_type_check;
+  END IF;
+END $$;
+
+ALTER TABLE public.contracts
+  ADD CONSTRAINT contracts_template_type_check
+  CHECK (template_type IN ('direct', 'agent', 'broker'));
+
+-- 4. contract_signers.role 加 'broker'
 DO $$
 BEGIN
   IF EXISTS (
