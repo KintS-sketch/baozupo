@@ -55,6 +55,16 @@ export default function RootLayout({
             <Sidebar />
             <main className="flex-1 min-w-0 main-content">
               {children}
+              <footer className="text-center text-xs text-muted-foreground py-4 mb-16 md:mb-4">
+                <a
+                  href="https://beian.miit.gov.cn/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  粤ICP备2024349156号-7
+                </a>
+              </footer>
             </main>
           </div>
           <MobileNav />
